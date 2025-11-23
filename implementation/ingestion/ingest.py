@@ -1,5 +1,5 @@
 """
-Main ingestion script for processing markdown documents into vector DB and knowledge graph.
+Main ingestion script for processing markdown documents into vector DB.
 """
 
 import os
@@ -7,15 +7,13 @@ import asyncio
 import logging
 import json
 import glob
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import argparse
 
-import asyncpg
 from dotenv import load_dotenv
 
-from .chunker import ChunkingConfig, create_chunker, DocumentChunk
+from .chunker import ChunkingConfig, create_chunker
 from .embedder import create_embedder
 from .contextual_enrichment import create_contextual_enricher
 
@@ -66,9 +64,12 @@ class DocumentIngestionPipeline:
             use_semantic_splitting=config.use_semantic_chunking
         )
         
-        self.chunker = create_chunker(self.chunker_config)
+        self.chunker = create_chunker(self.chunker_config, config.chunker_type)
         self.embedder = create_embedder()
-        self.contextual_enricher = create_contextual_enricher() if config.use_contextual_enrichment else None
+        self.contextual_enricher = (
+            create_contextual_enricher()
+            if config.use_contextual_enrichment else None
+        )
 
         self._initialized = False
     
@@ -115,7 +116,9 @@ class DocumentIngestionPipeline:
         document_files = self._find_document_files()
 
         if not document_files:
-            logger.warning(f"No supported document files found in {self.documents_folder}")
+            logger.warning(
+                f"No supported document files found in {self.documents_folder}"
+            )
             return []
 
         logger.info(f"Found {len(document_files)} document files to process")
@@ -124,7 +127,9 @@ class DocumentIngestionPipeline:
 
         for i, file_path in enumerate(document_files):
             try:
-                logger.info(f"Processing file {i+1}/{len(document_files)}: {file_path}")
+                logger.info(
+                    f"Processing file {i+1}/{len(document_files)}: {file_path}"
+                )
 
                 result = await self._ingest_single_document(file_path)
                 results.append(result)
@@ -148,7 +153,10 @@ class DocumentIngestionPipeline:
         total_chunks = sum(r.chunks_created for r in results)
         total_errors = sum(len(r.errors) for r in results)
         
-        logger.info(f"Ingestion complete: {len(results)} documents, {total_chunks} chunks, {total_errors} errors")
+        logger.info(
+            f"Ingestion complete: {len(results)} documents, "
+            f"{total_chunks} chunks, {total_errors} errors"
+        )
         
         return results
     
@@ -170,7 +178,9 @@ class DocumentIngestionPipeline:
         document_source = os.path.relpath(file_path, self.documents_folder)
 
         # Extract metadata from content
-        document_metadata = self._extract_document_metadata(document_content, file_path)
+        document_metadata = self._extract_document_metadata(
+            document_content, file_path
+        )
 
         logger.info(f"Processing document: {document_title}")
 
@@ -191,7 +201,9 @@ class DocumentIngestionPipeline:
                 chunks_created=0,
                 entities_extracted=0,
                 relationships_created=0,
-                processing_time_ms=(datetime.now() - start_time).total_seconds() * 1000,
+                processing_time_ms=(
+                    datetime.now() - start_time
+                ).total_seconds() * 1000,
                 errors=["No chunks created"]
             )
         
@@ -200,7 +212,7 @@ class DocumentIngestionPipeline:
         # Entity extraction removed (graph-related functionality)
         entities_extracted = 0
 
-        # Apply contextual enrichment if enabled (Anthropic's Contextual Retrieval)
+        # Apply contextual enrichment if enabled
         if self.contextual_enricher:
             logger.info("Applying contextual enrichment to chunks...")
             chunk_texts = [chunk.content for chunk in chunks]
@@ -221,7 +233,9 @@ class DocumentIngestionPipeline:
 
         # Generate embeddings
         embedded_chunks = await self.embedder.embed_chunks(chunks)
-        logger.info(f"Generated embeddings for {len(embedded_chunks)} chunks")
+        logger.info(
+            f"Generated embeddings for {len(embedded_chunks)} chunks"
+        )
         
         # Save to PostgreSQL
         document_id = await self._save_to_postgres(
@@ -291,20 +305,29 @@ class DocumentIngestionPipeline:
             return (content, None)  # No DoclingDocument for audio
 
         # Docling-supported formats (convert to markdown)
-        docling_formats = ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls', '.html', '.htm']
+        docling_formats = [
+            '.pdf', '.docx', '.doc', '.pptx', '.ppt',
+            '.xlsx', '.xls', '.html', '.htm'
+        ]
 
         if file_ext in docling_formats:
             try:
                 from docling.document_converter import DocumentConverter
 
-                logger.info(f"Converting {file_ext} file using Docling: {os.path.basename(file_path)}")
+                logger.info(
+                    f"Converting {file_ext} file using Docling: "
+                    f"{os.path.basename(file_path)}"
+                )
 
                 converter = DocumentConverter()
                 result = converter.convert(file_path)
 
                 # Export to markdown for consistent processing
                 markdown_content = result.document.export_to_markdown()
-                logger.info(f"Successfully converted {os.path.basename(file_path)} to markdown")
+                logger.info(
+                    f"Successfully converted {os.path.basename(file_path)} "
+                    "to markdown"
+                )
 
                 # Return both markdown and DoclingDocument for HybridChunker
                 return (markdown_content, result.document)
@@ -312,12 +335,17 @@ class DocumentIngestionPipeline:
             except Exception as e:
                 logger.error(f"Failed to convert {file_path} with Docling: {e}")
                 # Fall back to raw text if Docling fails
-                logger.warning(f"Falling back to raw text extraction for {file_path}")
+                logger.warning(
+                    f"Falling back to raw text extraction for {file_path}"
+                )
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         return (f.read(), None)
-                except:
-                    return (f"[Error: Could not read file {os.path.basename(file_path)}]", None)
+                except Exception:
+                    return (
+                        f"[Error: Could not read file "
+                        f"{os.path.basename(file_path)}]", None
+                    )
 
         # Text-based formats (read directly)
         else:
@@ -333,7 +361,9 @@ class DocumentIngestionPipeline:
         """Transcribe audio file using Whisper ASR via Docling."""
         try:
             from pathlib import Path
-            from docling.document_converter import DocumentConverter, AudioFormatOption
+            from docling.document_converter import (
+                DocumentConverter, AudioFormatOption
+            )
             from docling.datamodel.pipeline_options import AsrPipelineOptions
             from docling.datamodel import asr_model_specs
             from docling.datamodel.base_models import InputFormat
@@ -341,7 +371,9 @@ class DocumentIngestionPipeline:
 
             # Use Path object - Docling expects this
             audio_path = Path(file_path).resolve()
-            logger.info(f"Transcribing audio file using Whisper Turbo: {audio_path.name}")
+            logger.info(
+                f"Transcribing audio file using Whisper Turbo: {audio_path.name}"
+            )
             logger.info(f"Audio file absolute path: {audio_path}")
 
             # Verify file exists
@@ -366,12 +398,19 @@ class DocumentIngestionPipeline:
 
             # Export to markdown with timestamps
             markdown_content = result.document.export_to_markdown()
-            logger.info(f"Successfully transcribed {os.path.basename(file_path)}")
+            logger.info(
+                f"Successfully transcribed {os.path.basename(file_path)}"
+            )
             return markdown_content
 
         except Exception as e:
-            logger.error(f"Failed to transcribe {file_path} with Whisper ASR: {e}")
-            return f"[Error: Could not transcribe audio file {os.path.basename(file_path)}]"
+            logger.error(
+                f"Failed to transcribe {file_path} with Whisper ASR: {e}"
+            )
+            return (
+                f"[Error: Could not transcribe audio file "
+                f"{os.path.basename(file_path)}]"
+            )
 
     def _extract_title(self, content: str, file_path: str) -> str:
         """Extract title from document content or filename."""
@@ -404,7 +443,9 @@ class DocumentIngestionPipeline:
                     if isinstance(yaml_metadata, dict):
                         metadata.update(yaml_metadata)
             except ImportError:
-                logger.warning("PyYAML not installed, skipping frontmatter extraction")
+                logger.warning(
+                    "PyYAML not installed, skipping frontmatter extraction"
+                )
             except Exception as e:
                 logger.warning(f"Failed to parse frontmatter: {e}")
         
@@ -478,15 +519,37 @@ class DocumentIngestionPipeline:
 
 async def main():
     """Main function for running ingestion."""
-    parser = argparse.ArgumentParser(description="Ingest documents into vector DB")
-    parser.add_argument("--documents", "-d", default="documents", help="Documents folder path")
-    parser.add_argument("--no-clean", action="store_true", help="Skip cleaning existing data before ingestion (default: cleans automatically)")
-    parser.add_argument("--chunk-size", type=int, default=1000, help="Chunk size for splitting documents")
-    parser.add_argument("--chunk-overlap", type=int, default=200, help="Chunk overlap size")
-    parser.add_argument("--no-semantic", action="store_true", help="Disable semantic chunking")
-    parser.add_argument("--contextual", action="store_true", help="Enable contextual enrichment (Anthropic's method)")
-    # Graph-related arguments removed
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    parser = argparse.ArgumentParser(
+        description="Ingest documents into vector DB"
+    )
+    parser.add_argument(
+        "--documents", "-d", default="documents", help="Documents folder path"
+    )
+    parser.add_argument(
+        "--no-clean", action="store_true",
+        help="Skip cleaning existing data before ingestion"
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=1000,
+        help="Chunk size for splitting documents"
+    )
+    parser.add_argument(
+        "--chunk-overlap", type=int, default=200, help="Chunk overlap size"
+    )
+    parser.add_argument(
+        "--no-semantic", action="store_true", help="Disable semantic chunking"
+    )
+    parser.add_argument(
+        "--contextual", action="store_true",
+        help="Enable contextual enrichment (Anthropic's method)"
+    )
+    parser.add_argument(
+        "--chunker", type=str, default="semantic",
+        choices=["semantic", "simple", "adaptive"], help="Chunker type"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
 
     args = parser.parse_args()
 
@@ -502,14 +565,15 @@ async def main():
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         use_semantic_chunking=not args.no_semantic,
-        use_contextual_enrichment=args.contextual
+        use_contextual_enrichment=args.contextual,
+        chunker_type=args.chunker
     )
 
-    # Create and run pipeline - clean by default unless --no-clean is specified
+    # Create and run pipeline
     pipeline = DocumentIngestionPipeline(
         config=config,
         documents_folder=args.documents,
-        clean_before_ingest=not args.no_clean  # Clean by default
+        clean_before_ingest=not args.no_clean
     )
     
     def progress_callback(current: int, total: int):
@@ -528,8 +592,10 @@ async def main():
         print("INGESTION SUMMARY")
         print("="*50)
         print(f"Documents processed: {len(results)}")
-        print(f"Total chunks created: {sum(r.chunks_created for r in results)}")
-        # Graph-related stats removed
+        print(
+            f"Total chunks created: "
+            f"{sum(r.chunks_created for r in results)}"
+        )
         print(f"Total errors: {sum(len(r.errors) for r in results)}")
         print(f"Total processing time: {total_time:.2f} seconds")
         print()

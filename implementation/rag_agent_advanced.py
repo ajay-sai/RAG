@@ -12,7 +12,6 @@ Implements multiple RAG strategies:
 
 import asyncio
 import asyncpg
-import json
 import logging
 import os
 import sys
@@ -22,6 +21,8 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 from sentence_transformers import CrossEncoder
+from rank_bm25 import BM25Okapi
+import numpy as np
 
 # Load environment variables
 load_dotenv(".env")
@@ -33,6 +34,36 @@ db_pool = None
 
 # Initialize cross-encoder for re-ranking
 reranker = None
+
+# In-memory cache for BM25
+bm25_index = None
+bm25_chunks = None
+
+
+async def initialize_bm25():
+    """Initialize in-memory BM25 index."""
+    global bm25_index, bm25_chunks
+    if bm25_index is None:
+        logger.info("Initializing BM25 index...")
+        if not db_pool:
+            await initialize_db()
+
+        async with db_pool.acquire() as conn:
+            chunks_records = await conn.fetch("SELECT chunk_id, content FROM chunks")
+        
+        if not chunks_records:
+            logger.warning("No chunks found in DB to build BM25 index.")
+            bm25_chunks = []
+            return
+
+        bm25_chunks = [
+            {"chunk_id": str(r["chunk_id"]), "content": r["content"]}
+            for r in chunks_records
+        ]
+        
+        tokenized_corpus = [doc["content"].split(" ") for doc in bm25_chunks]
+        bm25_index = BM25Okapi(tokenized_corpus)
+        logger.info(f"BM25 index initialized with {len(bm25_chunks)} documents.")
 
 
 async def initialize_db():
@@ -69,7 +100,9 @@ def initialize_reranker():
 # STRATEGY 1: QUERY EXPANSION
 # ======================
 
-async def expand_query_variations(ctx: RunContext[None], query: str) -> List[str]:
+async def expand_query_variations(
+    ctx: RunContext[None], query: str
+) -> List[str]:
     """
     Generate multiple variations of a query for better retrieval.
 
@@ -83,7 +116,8 @@ async def expand_query_variations(ctx: RunContext[None], query: str) -> List[str
     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     expansion_prompt = f"""Generate 3 different variations of this search query.
-Each variation should capture a different perspective or phrasing while maintaining the same intent.
+Each variation should capture a different perspective or phrasing while maintaining
+the same intent.
 
 Original query: {query}
 
@@ -111,7 +145,9 @@ Return only the 3 variations, one per line, without numbers or bullets."""
 # STRATEGY 2 & 3: MULTI-QUERY RAG (parallel search with variations)
 # ======================
 
-async def search_with_multi_query(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_with_multi_query(
+    ctx: RunContext[None], query: str, limit: int = 5
+) -> str:
     """
     Search using multiple query variations in parallel (Multi-Query RAG).
 
@@ -171,7 +207,9 @@ async def search_with_multi_query(ctx: RunContext[None], query: str, limit: int 
             if chunk_id not in seen or row['similarity'] > seen[chunk_id]['similarity']:
                 seen[chunk_id] = row
 
-        unique_results = sorted(seen.values(), key=lambda x: x['similarity'], reverse=True)[:limit]
+        unique_results = sorted(
+            seen.values(), key=lambda x: x['similarity'], reverse=True
+        )[:limit]
 
         # Format results
         response_parts = []
@@ -180,7 +218,10 @@ async def search_with_multi_query(ctx: RunContext[None], query: str, limit: int 
                 f"[Source: {row['document_title']}]\n{row['content']}\n"
             )
 
-        return f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts)
+        return (
+            f"Found {len(response_parts)} relevant results:\n\n"
+            + "\n---\n".join(response_parts)
+        )
 
     except Exception as e:
         logger.error(f"Multi-query search failed: {e}", exc_info=True)
@@ -191,7 +232,9 @@ async def search_with_multi_query(ctx: RunContext[None], query: str, limit: int 
 # STRATEGY 3: RE-RANKING
 # ======================
 
-async def search_with_reranking(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_with_reranking(
+    ctx: RunContext[None], query: str, limit: int = 5
+) -> str:
     """
     Two-stage retrieval: Fast vector search + precise cross-encoder re-ranking.
 
@@ -246,10 +289,14 @@ async def search_with_reranking(ctx: RunContext[None], query: str, limit: int = 
         response_parts = []
         for i, (row, score) in enumerate(reranked, 1):
             response_parts.append(
-                f"[Source: {row['document_title']} | Relevance: {score:.2f}]\n{row['content']}\n"
+                f"[Source: {row['document_title']} | "
+                f"Relevance: {score:.2f}]\n{row['content']}\n"
             )
 
-        return f"Found {len(response_parts)} highly relevant results:\n\n" + "\n---\n".join(response_parts)
+        return (
+            f"Found {len(response_parts)} highly relevant results:\n\n"
+            + "\n---\n".join(response_parts)
+        )
 
     except Exception as e:
         logger.error(f"Re-ranking search failed: {e}", exc_info=True)
@@ -260,7 +307,9 @@ async def search_with_reranking(ctx: RunContext[None], query: str, limit: int = 
 # STRATEGY 4: AGENTIC RAG (Semantic Search + Full File Retrieval)
 # ======================
 
-async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_knowledge_base(
+    ctx: RunContext[None], query: str, limit: int = 5
+) -> str:
     """
     Standard semantic search over chunks.
 
@@ -298,14 +347,19 @@ async def search_knowledge_base(ctx: RunContext[None], query: str, limit: int = 
                 f"[Source: {row['document_title']}]\n{row['content']}\n"
             )
 
-        return f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts)
+        return (
+            f"Found {len(response_parts)} relevant results:\n\n"
+            + "\n---\n".join(response_parts)
+        )
 
     except Exception as e:
         logger.error(f"Knowledge base search failed: {e}", exc_info=True)
         return f"Search error: {str(e)}"
 
 
-async def retrieve_full_document(ctx: RunContext[None], document_title: str) -> str:
+async def retrieve_full_document(
+    ctx: RunContext[None], document_title: str
+) -> str:
     """
     Retrieve the full content of a specific document by title.
 
@@ -345,9 +399,15 @@ async def retrieve_full_document(ctx: RunContext[None], document_title: str) -> 
                 )
 
             doc_list = "\n- ".join([doc['title'] for doc in docs])
-            return f"Document '{document_title}' not found. Available documents:\n- {doc_list}"
+            return (
+                f"Document '{document_title}' not found. "
+                f"Available documents:\n- {doc_list}"
+            )
 
-        return f"**Document: {result['title']}**\n\nSource: {result['source']}\n\n{result['content']}"
+        return (
+            f"**Document: {result['title']}**\n\n"
+            f"Source: {result['source']}\n\n{result['content']}"
+        )
 
     except Exception as e:
         logger.error(f"Full document retrieval failed: {e}", exc_info=True)
@@ -358,7 +418,9 @@ async def retrieve_full_document(ctx: RunContext[None], document_title: str) -> 
 # STRATEGY 5: SELF-REFLECTIVE RAG
 # ======================
 
-async def search_with_self_reflection(ctx: RunContext[None], query: str, limit: int = 5) -> str:
+async def search_with_self_reflection(
+    ctx: RunContext[None], query: str, limit: int = 5
+) -> str:
     """
     Self-reflective search: evaluate results and refine if needed.
 
@@ -460,13 +522,18 @@ Respond with only the improved query, nothing else."""
                         limit
                     )
 
-                reflection_note = f"\n[Reflection: Refined query from '{query}' to '{refined_query}']\n"
+                reflection_note = (
+                    f"\n[Reflection: Refined query from '{query}' "
+                    f"to '{refined_query}']\n"
+                )
 
             except Exception as e:
                 logger.warning(f"Query refinement failed: {e}")
                 reflection_note = "\n[Reflection: Initial results had low relevance]\n"
         else:
-            reflection_note = f"\n[Reflection: Results deemed relevant (score: {grade_score}/5)]\n"
+            reflection_note = (
+                f"\n[Reflection: Results deemed relevant (score: {grade_score}/5)]\n"
+            )
 
         # Format final results
         response_parts = []
@@ -475,11 +542,273 @@ Respond with only the improved query, nothing else."""
                 f"[Source: {row['document_title']}]\n{row['content']}\n"
             )
 
-        return reflection_note + f"Found {len(response_parts)} results:\n\n" + "\n---\n".join(response_parts)
+        return (
+            reflection_note + f"Found {len(response_parts)} results:\n\n"
+            + "\n---\n".join(response_parts)
+        )
 
     except Exception as e:
         logger.error(f"Self-reflective search failed: {e}", exc_info=True)
         return f"Search error: {str(e)}"
+
+
+# ======================
+# STRATEGY 6: HYBRID RETRIEVAL (Dense + Sparse)
+# ======================
+
+async def search_with_hybrid_retrieval(
+    ctx: RunContext[None], query: str, limit: int = 10
+) -> str:
+    """
+    Combines dense (vector) and sparse (BM25) retrieval.
+    """
+    try:
+        if not db_pool:
+            await initialize_db()
+        if not bm25_index:
+            await initialize_bm25()
+
+        # 1. Dense retrieval (from existing vector search)
+        from ingestion.embedder import create_embedder
+        embedder = create_embedder()
+        query_embedding = await embedder.embed_query(query)
+        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+
+        async with db_pool.acquire() as conn:
+            dense_results = await conn.fetch(
+                "SELECT *, 1 - (embedding <=> $1) as similarity FROM chunks ORDER BY similarity DESC LIMIT $2",
+                embedding_str,
+                limit * 2
+            )
+
+        # 2. Sparse retrieval (BM25)
+        tokenized_query = query.split(" ")
+        bm25_scores = bm25_index.get_scores(tokenized_query)
+        top_n_indices = np.argsort(bm25_scores)[::-1][:limit * 2]
+        
+        sparse_results = [
+            {**bm25_chunks[i], "score": bm25_scores[i]} for i in top_n_indices
+        ]
+
+        # 3. Merge and re-rank (Reciprocal Rank Fusion)
+        fused_scores = {}
+        k = 60  # RRF constant
+
+        for i, doc in enumerate(dense_results):
+            chunk_id = str(doc["chunk_id"])
+            if chunk_id not in fused_scores:
+                fused_scores[chunk_id] = 0
+            fused_scores[chunk_id] += 1 / (k + i + 1)
+
+        for i, doc in enumerate(sparse_results):
+            chunk_id = doc["chunk_id"]
+            if chunk_id not in fused_scores:
+                fused_scores[chunk_id] = 0
+            fused_scores[chunk_id] += 1 / (k + i + 1)
+
+        sorted_fused = sorted(
+            fused_scores.items(), key=lambda item: item[1], reverse=True
+        )[:limit]
+        
+        # Fetch full chunk data for top results
+        top_chunk_ids = [item[0] for item in sorted_fused]
+        if not top_chunk_ids:
+            return "No relevant information found."
+
+        async with db_pool.acquire() as conn:
+            unique_results = await conn.fetch(
+                "SELECT * FROM chunks WHERE chunk_id = ANY($1::uuid[])", top_chunk_ids
+            )
+
+        response_parts = [
+            f"[Source: {r['document_title']}]\n{r['content']}\n"
+            for r in unique_results
+        ]
+        return (
+            f"Found {len(response_parts)} results via hybrid search:\n\n"
+            + "\n---\n".join(response_parts)
+        )
+
+    except Exception as e:
+        logger.error(f"Hybrid search failed: {e}", exc_info=True)
+        return f"Search error: {str(e)}"
+
+
+# ======================
+# STRATEGY 7: FACT VERIFICATION
+# ======================
+
+async def answer_with_fact_verification(ctx: RunContext[None], query: str) -> str:
+    """
+    Generates an answer and then verifies claims against retrieved evidence.
+    """
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # 1. Retrieve initial context
+        context_str = await search_knowledge_base(ctx, query, limit=10)
+
+        # 2. Generate an answer
+        answer_prompt = f"Context:\n{context_str}\n\nQuestion: {query}\nAnswer:"
+        answer_res = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": answer_prompt}]
+        )
+        answer = answer_res.choices[0].message.content.strip()
+
+        # 3. Extract claims
+        claim_prompt = (
+            f"Answer: {answer}\n\nExtract factual claims from the "
+            "answer above as a numbered list."
+        )
+        claim_res = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": claim_prompt}]
+        )
+        claims_str = claim_res.choices[0].message.content.strip()
+
+        # 4. Verify claims
+        verify_prompt = f"Context:\n{context_str}\n\nClaims:\n{claims_str}\n\nVerify each claim based *only* on the context. Respond with SUPPORTED, CONTRADICTED, or NEUTRAL for each."
+        verify_res = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": verify_prompt}]
+        )
+        verification = verify_res.choices[0].message.content.strip()
+
+        return f"Answer:\n{answer}\n\n---\nFact Verification:\n{verification}"
+
+    except Exception as e:
+        logger.error(f"Fact verification failed: {e}", exc_info=True)
+        return f"Error during fact verification: {str(e)}"
+
+
+# ======================
+# STRATEGY 8: MULTI-HOP REASONING
+# ======================
+
+async def answer_with_multi_hop(
+    ctx: RunContext[None], query: str, hops: int = 2
+) -> str:
+    """
+    Answers complex questions by performing iterative retrieval.
+
+    Args:
+        query: The initial complex query
+        hops: Number of retrieval-generation hops
+
+    Returns:
+        A comprehensive answer derived from multiple sources.
+    """
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        accumulated_context = []
+        current_query = query
+        reason_log = f"Multi-hop Reasoning Log for '{query}':\n"
+
+        for i in range(hops):
+            reason_log += f"\nHop {i+1}: Searching for '{current_query}'\n"
+            
+            # Retrieve documents
+            results_str = await search_knowledge_base(ctx, current_query, limit=3)
+            accumulated_context.append(results_str)
+            
+            # Generate next query
+            if i < hops - 1:
+                refine_prompt = f"""Based on the original question and the retrieved context, what is the next logical question to ask?
+
+Original Question: {query}
+Retrieved Context:
+{" ".join(accumulated_context)}
+
+Next Question:"""
+                
+                response = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": refine_prompt}]
+                )
+                current_query = response.choices[0].message.content.strip()
+                reason_log += f"Next query: {current_query}\n"
+
+        # Final answer generation
+        final_prompt = f"""Synthesize a comprehensive answer using all retrieved context.
+
+Original Question: {query}
+All Retrieved Context:
+{" ".join(accumulated_context)}
+
+Final Answer:"""
+        
+        final_response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": final_prompt}]
+        )
+        final_answer = final_response.choices[0].message.content.strip()
+
+        return f"{reason_log}\n---\nFinal Answer:\n{final_answer}"
+
+    except Exception as e:
+        logger.error(f"Multi-hop reasoning failed: {e}", exc_info=True)
+        return f"Error during multi-hop reasoning: {str(e)}"
+
+
+# ======================
+# STRATEGY 9: UNCERTAINTY ESTIMATION
+# ======================
+
+async def answer_with_uncertainty(
+    ctx: RunContext[None], query: str, num_responses: int = 3
+) -> str:
+    """
+    Estimates uncertainty by generating multiple answers and checking for consistency.
+    """
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        from ingestion.embedder import create_embedder
+        embedder = create_embedder()
+
+        # 1. Retrieve context
+        context = await search_knowledge_base(ctx, query, limit=5)
+
+        # 2. Generate multiple responses
+        responses = []
+        for _ in range(num_responses):
+            prompt = f"Based on this context, answer the query: '{query}'. Context: {context}"
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            responses.append(response.choices[0].message.content.strip())
+        
+        # 3. Estimate uncertainty using embedding similarity
+        if len(responses) < 2:
+            return f"Answer:\n{responses[0]}\n\n---\nUncertainty Score: N/A"
+
+        response_embeddings = await embedder.embed_documents(responses)
+        
+        # Calculate cosine similarity between the first embedding and the rest
+        similarities = [
+            np.dot(response_embeddings[0], other_embedding) /
+            (np.linalg.norm(response_embeddings[0]) * np.linalg.norm(other_embedding))
+            for other_embedding in response_embeddings[1:]
+        ]
+        
+        avg_similarity = sum(similarities) / len(similarities)
+        uncertainty_score = 1.0 - avg_similarity
+
+        return (
+            f"Answer:\n{responses[0]}\n\n---\n"
+            f"Uncertainty Score: {uncertainty_score:.2f} "
+            "(0=confident, 1=uncertain)"
+        )
+
+    except Exception as e:
+        logger.error(f"Uncertainty estimation failed: {e}", exc_info=True)
+        return f"Error during uncertainty estimation: {str(e)}"
 
 
 # ======================
@@ -488,21 +817,30 @@ Respond with only the improved query, nothing else."""
 
 agent = Agent(
     'openai:gpt-4o-mini',
-    system_prompt="""You are an advanced knowledge assistant with multiple retrieval strategies at your disposal.
+    system_prompt="""You are an advanced knowledge assistant with multiple retrieval
+strategies at your disposal.
 
 AVAILABLE TOOLS:
 1. search_knowledge_base - Standard semantic search over document chunks
 2. retrieve_full_document - Get complete document when chunks aren't enough
 3. search_with_multi_query - Use multiple query variations for better recall
-4. search_with_reranking - Use two-stage retrieval with re-ranking for precision
+4. search_with_reranking - Use two-stage retrieval for precision
 5. search_with_self_reflection - Evaluate and refine search results automatically
+6. search_with_hybrid_retrieval - Combine vector and keyword search (placeholder)
+7. answer_with_fact_verification - Generate answer then verify claims (placeholder)
+8. answer_with_multi_hop - Iterative retrieval for complex questions
+9. answer_with_uncertainty - Estimate confidence by generating multiple answers
 
 STRATEGY SELECTION GUIDE:
 - Use search_knowledge_base for most queries (fast, reliable)
-- Use retrieve_full_document when you need full context or found relevant chunks but need more
-- Use search_with_multi_query when query is ambiguous or could be interpreted multiple ways
-- Use search_with_reranking when precision is critical (legal, medical, financial queries)
+- Use retrieve_full_document when you need full context or found relevant chunks
+- Use search_with_multi_query when query is ambiguous or could be interpreted
+- Use search_with_reranking for precision-critical queries
 - Use search_with_self_reflection for complex research questions
+- Use search_with_hybrid_retrieval for queries with specific keywords
+- Use answer_with_fact_verification for high-stakes domains requiring traceability
+- Use answer_with_multi_hop for compositional questions
+- Use answer_with_uncertainty when it's important to know model confidence
 
 You can use multiple tools in sequence if needed. Be concise but thorough.""",
     tools=[
@@ -510,7 +848,11 @@ You can use multiple tools in sequence if needed. Be concise but thorough.""",
         retrieve_full_document,
         search_with_multi_query,
         search_with_reranking,
-        search_with_self_reflection
+        search_with_self_reflection,
+        search_with_hybrid_retrieval,
+        answer_with_fact_verification,
+        answer_with_multi_hop,
+        answer_with_uncertainty
     ]
 )
 

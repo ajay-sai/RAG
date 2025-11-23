@@ -2,5 +2,11 @@
     "DockerRun.DisableDockerrc": true,
     "DockerRun.Containers": [
         "7ad92e346085"
-    ]
+    ],
+    "accessibility.openChatEditedFiles": false,
+    "accessibility.verboseChatProgressUpdates": false,
+    "chat.agent.thinking.collapsedTools": "all",
+    "chat.agent.thinkingStyle": "collapsedPreview",
+    "chat.checkpoints.showFileChanges": true,
+    "chat.commandCenter.enabled": true
 }

@@ -15,6 +15,11 @@
 | Agentic RAG | `rag_agent_advanced.py` | 263-354 | ✅ Agent Tools |
 | Self-Reflective RAG | `rag_agent_advanced.py` | 361-482 | ✅ Agent Tool |
 | Contextual Retrieval | `ingestion/contextual_enrichment.py` | 41-89 | ✅ Optional |
+| Hybrid Retrieval | `rag_agent_advanced.py` | 489-548 | ✅ Agent Tool |
+| Fact Verification | `rag_agent_advanced.py` | 551-611 | ✅ Agent Tool |
+| Multi-hop Reasoning | `rag_agent_advanced.py` | 614-681 | ✅ Agent Tool |
+| Uncertainty Estimation | `rag_agent_advanced.py` | 684-730 | ✅ Agent Tool |
+| Adaptive Chunking | `ingestion/chunker.py` | 344-405 | ✅ Optional |
 
 ---
 
@@ -573,6 +578,192 @@ Clean data is essential. Remove duplicates, handle missing values..."
 
 ---
 
+## 8️⃣ Hybrid Retrieval (Dense + Sparse)
+
+**File**: `rag_agent_advanced.py`
+**Lines**: 489-548
+**Status**: ✅ Agent Tool
+
+### Core Implementation
+
+```python
+# Lines 489-548
+async def search_with_hybrid_retrieval(ctx: RunContext[None], query: str, limit: int = 10) -> str:
+    """
+    Combines dense (vector) and sparse (BM25) retrieval.
+    """
+    # ... initialization of db and bm25 index ...
+
+    # 1. Dense retrieval (vector search)
+    # ...
+
+    # 2. Sparse retrieval (BM25)
+    tokenized_query = query.split(" ")
+    bm25_scores = bm25_index.get_scores(tokenized_query)
+    # ...
+
+    # 3. Merge and re-rank (Reciprocal Rank Fusion)
+    # ...
+```
+
+**How it works**:
+- Fetches results from a vector store (dense) and an in-memory BM25 index (sparse).
+- Uses Reciprocal Rank Fusion (RRF) to combine the scores from both retrievers, providing a balanced set of semantic and keyword matches.
+
+---
+
+## 9️⃣ Fact Verification
+
+**File**: `rag_agent_advanced.py`
+**Lines**: 551-611
+**Status**: ✅ Agent Tool
+
+### Core Implementation
+
+```python
+# Lines 551-611
+async def answer_with_fact_verification(ctx: RunContext[None], query: str) -> str:
+    """
+    Generates an answer and then verifies claims against retrieved evidence.
+    """
+    # 1. Retrieve initial context
+    context_str = await search_knowledge_base(ctx, query, limit=10)
+
+    # 2. Generate an answer
+    answer = # ... (LLM call to generate answer from context) ...
+
+    # 3. Extract claims
+    claims_str = # ... (LLM call to extract claims from answer) ...
+
+    # 4. Verify claims
+    verification = # ... (LLM call to verify claims against context) ...
+```
+
+**How it works**:
+- First, generates an answer using retrieved context.
+- Then, uses an LLM to extract factual claims from the generated answer.
+- Finally, uses another LLM call to verify each claim against the original context, returning a verification log.
+
+---
+
+## 🔟 Multi-hop Reasoning
+
+**File**: `rag_agent_advanced.py`
+**Lines**: 614-681
+**Status**: ✅ Agent Tool
+
+### Core Implementation
+
+```python
+# Lines 614-681
+async def answer_with_multi_hop(ctx: RunContext[None], query: str, hops: int = 2) -> str:
+    """
+    Answers complex questions by performing iterative retrieval.
+    """
+    accumulated_context = []
+    current_query = query
+
+    for i in range(hops):
+        # Retrieve documents for the current query
+        results_str = await search_knowledge_base(ctx, current_query, limit=3)
+        accumulated_context.append(results_str)
+        
+        # Generate the next query based on what's been found so far
+        if i < hops - 1:
+            current_query = # ... (LLM call to generate next question) ...
+
+    # Generate a final answer using all accumulated context
+    final_answer = # ... (LLM call to synthesize final answer) ...
+```
+
+**How it works**:
+- Starts with the user's query and retrieves relevant documents.
+- Uses an LLM to generate a follow-up question to bridge gaps or explore connections.
+- Repeats this process for a set number of "hops".
+- Synthesizes a final answer from all the context gathered during the hops.
+
+---
+
+## 1️⃣1️⃣ Uncertainty Estimation
+
+**File**: `rag_agent_advanced.py`
+**Lines**: 684-730
+**Status**: ✅ Agent Tool
+
+### Core Implementation
+
+```python
+# Lines 684-730
+async def answer_with_uncertainty(ctx: RunContext[None], query: str, num_responses: int = 3) -> str:
+    """
+    Estimates uncertainty by generating multiple answers and checking for consistency.
+    """
+    # 1. Retrieve context
+    context = await search_knowledge_base(ctx, query, limit=5)
+
+    # 2. Generate multiple responses with higher temperature
+    responses = # ... (loop generating multiple LLM responses) ...
+    
+    # 3. Estimate uncertainty using embedding similarity
+    response_embeddings = await embedder.embed_documents(responses)
+    
+    # Calculate cosine similarity between the first embedding and the rest
+    similarities = # ... (numpy dot product calculation) ...
+    
+    avg_similarity = sum(similarities) / len(similarities)
+    uncertainty_score = 1.0 - avg_similarity
+```
+
+**How it works**:
+- Generates multiple answers to the same query using a higher temperature.
+- Embeds each response and calculates the average cosine similarity between them.
+- A high similarity score indicates low uncertainty, and vice-versa.
+
+---
+
+## 1️⃣2️⃣ Adaptive Chunking
+
+**File**: `ingestion/chunker.py`
+**Lines**: 344-405
+**Status**: ✅ Optional (use `--chunker adaptive` flag)
+
+### Core Implementation
+
+```python
+# Lines 344-405 in ingestion/chunker.py
+class AdaptiveChunker:
+    """
+    Adaptive chunker that varies chunk size based on content density.
+    """
+    def __init__(self, config: ChunkingConfig):
+        # ... configuration ...
+        self.dense_threshold = 2.0 # sentences per 100 chars
+        self.dense_size = 300
+        self.sparse_size = 1200
+
+    def _estimate_density(self, text: str) -> float:
+        # ... logic to estimate sentence density ...
+
+    async def chunk_document(self, content: str, ...):
+        paragraphs = # ... split content into paragraphs ...
+        for p in paragraphs:
+            density = self._estimate_density(p)
+            target_size = self.dense_size if density > self.dense_threshold else self.sparse_size
+            # ... create chunks of target_size ...
+```
+
+**How to enable**:
+```bash
+python -m ingestion.ingest --documents ./documents --chunker adaptive
+```
+
+**How it works**:
+- Estimates the "information density" of each paragraph (here, simplified as sentence count).
+- Assigns a smaller chunk size to dense paragraphs to improve precision.
+- Assigns a larger chunk size to sparse paragraphs to retain context.
+
+---
+
 ## 🤖 Agent Configuration
 
 **File**: `rag_agent_advanced.py`
@@ -629,6 +820,10 @@ You can use multiple tools in sequence if needed. Be concise but thorough.""",
 | Agentic | Both tools above | 263-354 | 0 | 1-2 | $ | ⚡⚡ |
 | Self-Reflective | `search_with_self_reflection()` | 361-482 | 2-3 | 1-2 | $$$ | ⚡ |
 | Contextual Enrichment | `enrich_chunk()` | 41-89 | 1 per chunk | 0 | $$$$ | ⚡ |
+| Hybrid Retrieval | `search_with_hybrid_retrieval()` | 489-548 | 0 | 1 | $ | ⚡⚡ |
+| Fact Verification | `answer_with_fact_verification()` | 551-611 | 1 | 1 | $ | ⚡ |
+| Multi-hop Reasoning | `answer_with_multi_hop()` | 614-681 | 1 | 1 | $ | ⚡ |
+| Uncertainty Estimation | `answer_with_uncertainty()` | 684-730 | 3 | 1 | $$ | ⚡ |
 
 ---
 
@@ -705,7 +900,7 @@ asyncio.run(test())
 
 ## 📝 Summary
 
-**7 Strategies Fully Implemented:**
+**12 Strategies Fully Implemented:**
 
 1. ✅ **Context-Aware Chunking** - Default in ingestion
 2. ✅ **Query Expansion** - Helper for Multi-Query
@@ -714,6 +909,11 @@ asyncio.run(test())
 5. ✅ **Agentic RAG** - Two complementary agent tools
 6. ✅ **Self-Reflective RAG** - Agent tool
 7. ✅ **Contextual Retrieval** - Optional ingestion enhancement
+8. ✅ **Hybrid Retrieval** - Agent tool
+9. ✅ **Fact Verification** - Agent tool
+🔟. ✅ **Multi-hop Reasoning** - Agent tool
+1️⃣1️⃣. ✅ **Uncertainty Estimation** - Agent tool
+1️⃣2️⃣. ✅ **Adaptive Chunking** - Optional ingestion enhancement
 
 **Total Lines of Implementation**: ~500 lines across 3 files
 

@@ -347,3 +347,39 @@ docling-rag-agent/
 ├── .env.example             # Environment variables template
 └── README.md                # This file
 ```
+
+## Advanced Strategies
+
+| Strategy | Status | Use Cases | Benefits | Trade-offs |
+| -------- | ------ | --------- | -------- | ---------- |
+| Self-Reflective RAG | ✅ Code Example | Research queries | Self-correcting | Highest latency |
+| 11 | [Fine-tuned Embeddings](#11-fine-tuned-embeddings) | 📝 Pseudocode Only | Domain-specific | Best accuracy | Training required |
+| 12 | Hybrid Retrieval | ✅ Code Example | Keyword-sensitive | Balanced recall | More complex infra |
+| 13 | Fact Verification | ✅ Code Example | High-stakes domains | Traceability | Higher latency |
+| 14 | Multi-hop Reasoning | ✅ Code Example | Complex questions | Solves compositional queries | Expensive |
+| 15 | Uncertainty Estimation | ✅ Code Example | Risk-sensitive apps | Trustworthy outputs | More compute |
+| 16 | Adaptive Chunking | ✅ Code Example | Heterogeneous docs | Better precision | Complex ingestion |
+
+### Legend
+- ✅ **Code Example**: Full code in `implementation/` (educational, not production-ready)
+
+### Run the Code Examples (Educational)
+
+> **Note**: These are educational examples to show how strategies work in real code. Not guaranteed to be fully functional or production-ready.
+
+```bash
+cd implementation
+
+# Install dependencies
+pip install -r requirements-advanced.txt
+
+# Setup environment
+cp .env.example .env
+# Edit .env: Add DATABASE_URL and OPENAI_API_KEY
+
+# Ingest documents (with adaptive chunking)
+python -m ingestion.ingest --documents ./documents --chunker adaptive
+
+# Run the advanced agent
+python rag_agent_advanced.py
+```

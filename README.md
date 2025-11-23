@@ -20,6 +20,8 @@ Perfect for: AI engineers, ML practitioners, and anyone building RAG systems.
 5. [Detailed Strategy Guide](#-detailed-strategy-guide)
 6. [Repository Structure](#-repository-structure)
 
+New: Added five more advanced techniques (12-16). See `docs/12-hybrid-retrieval.md` through `docs/16-adaptive-chunking.md` and matching examples in `examples/`.
+
 ---
 
 ## 🎯 Strategy Overview
@@ -37,6 +39,11 @@ Perfect for: AI engineers, ML practitioners, and anyone building RAG systems.
 | 9 | [Hierarchical RAG](#9-hierarchical-rag) | 📝 Pseudocode Only | Complex documents | Precision + context | Complex setup |
 | 10 | [Self-Reflective RAG](#10-self-reflective-rag) | ✅ Code Example | Research queries | Self-correcting | Highest latency |
 | 11 | [Fine-tuned Embeddings](#11-fine-tuned-embeddings) | 📝 Pseudocode Only | Domain-specific | Best accuracy | Training required |
+| 12 | Hybrid Retrieval | ✅ Code Example | Keyword-sensitive | Balanced recall | More complex infra |
+| 13 | Fact Verification | ✅ Code Example | High-stakes domains | Traceability | Higher latency |
+| 14 | Multi-hop Reasoning | ✅ Code Example | Complex questions | Solves compositional queries | Expensive |
+| 15 | Uncertainty Estimation | ✅ Code Example | Risk-sensitive apps | Trustworthy outputs | More compute |
+| 16 | Adaptive Chunking | ✅ Code Example | Heterogeneous docs | Better precision | Complex ingestion |
 
 ### Legend
 - ✅ **Code Example**: Full code in `implementation/` (educational, not production-ready)
@@ -68,8 +75,8 @@ pip install -r requirements-advanced.txt
 cp .env.example .env
 # Edit .env: Add DATABASE_URL and OPENAI_API_KEY
 
-# Ingest documents (with optional contextual enrichment)
-python -m ingestion.ingest --documents ./documents --contextual
+# Ingest documents (with adaptive chunking)
+python -m ingestion.ingest --documents ./documents --chunker adaptive
 
 # Run the advanced agent
 python rag_agent_advanced.py

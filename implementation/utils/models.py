@@ -4,9 +4,9 @@ Pydantic models for data validation and serialization.
 
 from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime
-from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from enum import Enum
+
 
 # Enums
 class SearchType(str, Enum):
@@ -15,19 +15,25 @@ class SearchType(str, Enum):
     KEYWORD = "keyword"
     HYBRID = "hybrid"
 
+
 class MessageRole(str, Enum):
     """Message role enum."""
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
 
+
 # Request Models
 class SearchRequest(BaseModel):
     """Search request model."""
     query: str = Field(..., description="Search query")
-    search_type: SearchType = Field(default=SearchType.SEMANTIC, description="Type of search")
+    search_type: SearchType = Field(
+        default=SearchType.SEMANTIC, description="Type of search"
+    )
     limit: int = Field(default=10, ge=1, le=50, description="Maximum results")
-    filters: Dict[str, Any] = Field(default_factory=dict, description="Search filters")
+    filters: Dict[str, Any] = Field(
+        default_factory=dict, description="Search filters"
+    )
     
     model_config = ConfigDict(use_enum_values=True)
 
@@ -59,8 +65,6 @@ class ChunkResult(BaseModel):
     def validate_score(cls, v: float) -> float:
         """Ensure score is between 0 and 1."""
         return max(0.0, min(1.0, v))
-
-
 
 
 class SearchResponse(BaseModel):
@@ -122,7 +126,9 @@ class Chunk(BaseModel):
     def validate_embedding(cls, v: Optional[List[float]]) -> Optional[List[float]]:
         """Validate embedding dimensions."""
         if v is not None and len(v) != 1536:  # OpenAI text-embedding-3-small
-            raise ValueError(f"Embedding must have 1536 dimensions, got {len(v)}")
+            raise ValueError(
+                f"Embedding must have 1536 dimensions, got {len(v)}"
+            )
         return v
 
 
@@ -158,8 +164,6 @@ class AgentDependencies(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-
-
 class AgentContext(BaseModel):
     """Agent execution context."""
     session_id: str
@@ -176,7 +180,8 @@ class IngestionConfig(BaseModel):
     chunk_overlap: int = Field(default=200, ge=0, le=1000)
     max_chunk_size: int = Field(default=2000, ge=500, le=10000)
     use_semantic_chunking: bool = True
-    use_contextual_enrichment: bool = False  # Anthropic's Contextual Retrieval
+    use_contextual_enrichment: bool = False
+    chunker_type: str = "semantic"
 
     @field_validator('chunk_overlap')
     @classmethod
@@ -184,7 +189,9 @@ class IngestionConfig(BaseModel):
         """Ensure overlap is less than chunk size."""
         chunk_size = info.data.get('chunk_size', 1000)
         if v >= chunk_size:
-            raise ValueError(f"Chunk overlap ({v}) must be less than chunk size ({chunk_size})")
+            raise ValueError(
+                f"Chunk overlap ({v}) must be less than chunk size ({chunk_size})"
+            )
         return v
 
 
@@ -195,5 +202,5 @@ class IngestionResult(BaseModel):
     chunks_created: int
     processing_time_ms: float
     errors: List[str] = Field(default_factory=list)
-    entities_extracted: int = 0  # For compatibility
-    relationships_created: int = 0  # For compatibility
+    entities_extracted: int = 0
+    relationships_created: int = 0
