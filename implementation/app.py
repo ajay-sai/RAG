@@ -28,10 +28,13 @@ from utils.config_manager import save_active_config, load_active_config
 
 # Page config
 st.set_page_config(
-    page_title="RAG Strategy Lab",
+    page_title="RAG Strategy Lab - Learn Advanced RAG Techniques",
     page_icon="🧪",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "### RAG Strategy Lab\nAn educational tool for learning and testing advanced RAG strategies.\n\nBuilt for AI/ML and Data Science students."
+    }
 )
 
 # --- Theme & Styling ---
@@ -41,6 +44,7 @@ if 'theme' not in st.session_state:
 
 def toggle_theme():
     st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+    st.rerun()
 
 # Dynamic CSS variables based on theme
 theme_colors = {
@@ -84,10 +88,11 @@ theme_css = f"""
         --shadow: {current_theme['--shadow']};
     }}
 
+    /* Main strategy container with better shadows and borders */
     .strategy-container {{
-        border: 1px solid var(--card-border);
-        border-radius: 10px;
-        padding: 20px;
+        border: 2px solid var(--card-border);
+        border-radius: 12px;
+        padding: 24px;
         background-color: var(--card-bg);
         margin-bottom: 20px;
         box-shadow: var(--shadow);
@@ -95,30 +100,79 @@ theme_css = f"""
         transition: all 0.3s ease;
     }}
     
-    .result-box {{
-        background-color: var(--result-bg);
-        padding: 15px;
-        border-radius: 8px;
-        margin-top: 10px;
-        border-left: 4px solid var(--result-border-left);
-        color: var(--text-color);
+    .strategy-container:hover {{
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
     }}
     
+    /* Result box with gradient border */
+    .result-box {{
+        background-color: var(--result-bg);
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 15px;
+        border-left: 5px solid var(--result-border-left);
+        color: var(--text-color);
+        line-height: 1.6;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }}
+    
+    /* Metric tags with better styling */
     .metric-tag {{
         background-color: var(--metric-bg);
         color: var(--metric-text);
-        padding: 4px 10px;
-        border-radius: 4px;
+        padding: 6px 14px;
+        border-radius: 20px;
         font-size: 0.85em;
-        margin-right: 8px;
+        margin-right: 10px;
         font-weight: 600;
         display: inline-block;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }}
+    
+    /* Header styling */
+    h1, h2, h3 {{
+        color: var(--text-color);
+    }}
+    
+    /* Better spacing for containers */
+    .stContainer {{
+        padding: 1rem;
+    }}
+    
+    /* Improved tabs styling */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 8px;
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
+        border-radius: 8px 8px 0 0;
+        padding: 12px 24px;
+        font-weight: 500;
     }}
 
     /* Accessibility: Focus states */
     button:focus, input:focus, textarea:focus, select:focus {{
-        outline: 2px solid #4CAF50;
+        outline: 3px solid #4CAF50;
         outline-offset: 2px;
+    }}
+    
+    /* Info boxes */
+    .stAlert {{
+        border-radius: 8px;
+        padding: 1rem;
+    }}
+    
+    /* Better button styling */
+    .stButton > button {{
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }}
+    
+    .stButton > button:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     }}
 </style>
 """
@@ -199,22 +253,103 @@ def estimate_cost(config: StrategyConfig) -> str:
 
 def render_ingestion_page():
     st.header("📥 Ingestion Lab")
-    st.write("Configure how documents are processed, chunked, and embedded.")
+    st.markdown("""
+    Transform your documents into searchable knowledge. This lab processes documents through:
+    - **Document Loading** (PDF, DOCX, Markdown, Audio)
+    - **Intelligent Chunking** (Semantic, Fixed, Adaptive)
+    - **Vector Embedding** (OpenAI models)
+    - **Database Storage** (PostgreSQL with pgvector)
+    """)
+    
+    st.info("💡 **Tip for Learners:** Start by uploading a few small documents to see how different chunking strategies affect retrieval quality.", icon="💡")
+    
+    # File Upload Section
+    with st.container(border=True):
+        st.subheader("📁 Documents")
+        
+        tab1, tab2 = st.tabs(["Upload Files", "Available Files"])
+        
+        with tab1:
+            uploaded_files = st.file_uploader(
+                "Upload documents to process",
+                type=["pdf", "docx", "md", "txt", "mp3", "wav"],
+                accept_multiple_files=True,
+                help="Supported formats: PDF, DOCX, Markdown, Text, Audio (MP3, WAV)"
+            )
+            
+            if uploaded_files:
+                st.write(f"**{len(uploaded_files)} file(s) selected for upload:**")
+                for file in uploaded_files:
+                    st.write(f"- {file.name} ({file.size / 1024:.2f} KB)")
+                
+                if st.button("💾 Save Uploaded Files", type="secondary"):
+                    try:
+                        docs_dir = "documents"
+                        os.makedirs(docs_dir, exist_ok=True)
+                        saved_files = []
+                        
+                        for file in uploaded_files:
+                            file_path = os.path.join(docs_dir, file.name)
+                            with open(file_path, "wb") as f:
+                                f.write(file.getbuffer())
+                            saved_files.append(file.name)
+                        
+                        st.success(f"✅ Successfully saved {len(saved_files)} file(s) to documents folder!")
+                        st.info("You can now configure and run the ingestion pipeline below.")
+                    except Exception as e:
+                        st.error(f"Error saving files: {e}")
+        
+        with tab2:
+            docs_dir = "documents"
+            if os.path.exists(docs_dir):
+                files = [f for f in os.listdir(docs_dir) if os.path.isfile(os.path.join(docs_dir, f))]
+                if files:
+                    st.write(f"**{len(files)} file(s) available in documents folder:**")
+                    
+                    # File selection
+                    if 'selected_files' not in st.session_state:
+                        st.session_state.selected_files = files  # All selected by default
+                    
+                    select_all = st.checkbox("Select All Files", value=True, key="select_all_docs")
+                    
+                    if select_all:
+                        st.session_state.selected_files = files
+                    
+                    selected_files = st.multiselect(
+                        "Select files to ingest:",
+                        options=files,
+                        default=files if select_all else st.session_state.selected_files,
+                        help="Choose which documents to process"
+                    )
+                    st.session_state.selected_files = selected_files
+                    
+                    # Show file details
+                    with st.expander("View File Details"):
+                        for file in files:
+                            file_path = os.path.join(docs_dir, file)
+                            file_size = os.path.getsize(file_path) / 1024  # KB
+                            selected = "✅" if file in selected_files else "⬜"
+                            st.write(f"{selected} **{file}** - {file_size:.2f} KB")
+                else:
+                    st.warning("No files found in documents folder. Please upload some files first.")
+            else:
+                st.warning("Documents folder does not exist. Please upload files to create it.")
     
     with st.container(border=True):
-        st.subheader("Configuration")
+        st.subheader("⚙️ Configuration")
+        st.caption("Configure how your documents will be processed and embedded")
         
         col1, col2 = st.columns(2)
         with col1:
             chunk_size = st.slider(
                 "Chunk Size (tokens)", 
                 min_value=100, max_value=2000, value=1000, step=100,
-                help="Target size for each document chunk."
+                help="📏 Target size for each document chunk. Larger chunks provide more context but may be less precise. Recommended: 500-1000 for most use cases."
             )
             chunk_overlap = st.slider(
                 "Chunk Overlap", 
                 min_value=0, max_value=500, value=200, step=50,
-                help="Number of overlapping tokens between adjacent chunks."
+                help="🔗 Number of overlapping tokens between adjacent chunks. Overlap helps maintain context across chunk boundaries. Recommended: 10-20% of chunk size."
             )
             
         with col2:
@@ -222,77 +357,106 @@ def render_ingestion_page():
                 "Chunker Type",
                 ["semantic", "fixed", "adaptive"],
                 index=0,
-                help="Algorithm used to split text."
+                help="✂️ **Semantic:** Splits at natural boundaries (sentences, paragraphs). **Fixed:** Equal-sized chunks. **Adaptive:** Document-structure aware splitting."
             )
             embedding_model = st.selectbox(
                 "Embedding Model",
                 ["text-embedding-3-small", "text-embedding-3-large"],
                 index=0,
-                help="Model used to generate vector embeddings."
+                help="🧠 **small:** Faster and cheaper, good for most tasks. **large:** Higher quality embeddings, better for complex domains."
             )
             
         contextual = st.checkbox(
             "Use Contextual Enrichment", 
             value=False,
-            help="Uses an LLM to prepend document context to each chunk (Higher cost, better retrieval)."
+            help="🎯 Uses an LLM to add document-level context to each chunk before embedding. Improves retrieval accuracy but increases cost and processing time. (Anthropic's Contextual Retrieval technique)"
         )
 
         if st.button("🔄 Run Ingestion Pipeline", type="primary"):
-            # Save config
-            config_data = {
-                "chunk_size": chunk_size,
-                "chunk_overlap": chunk_overlap,
-                "chunker_type": chunker_type,
-                "embedding_model": embedding_model,
-                "use_contextual_enrichment": contextual
-            }
-            save_active_config(config_data)
+            # Check if files are selected
+            selected_files = st.session_state.get('selected_files', [])
             
-            # Run Pipeline
-            st.info("Starting ingestion... This will clear existing data.")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            try:
-                # Initialize Pipeline
-                ingest_config = IngestionConfig(
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                    use_semantic_chunking=(chunker_type=="semantic"),
-                    chunker_type=chunker_type,
-                    use_contextual_enrichment=contextual
-                )
+            if not selected_files:
+                st.warning("⚠️ No files selected. Please select files to ingest in the 'Available Files' tab.")
+            else:
+                # Save config
+                config_data = {
+                    "chunk_size": chunk_size,
+                    "chunk_overlap": chunk_overlap,
+                    "chunker_type": chunker_type,
+                    "embedding_model": embedding_model,
+                    "use_contextual_enrichment": contextual
+                }
+                save_active_config(config_data)
                 
-                # We need to run async code in sync context
-                async def run_pipeline():
-                    pipeline = DocumentIngestionPipeline(
-                        config=ingest_config,
-                        documents_folder="documents",
-                        clean_before_ingest=True
+                # Run Pipeline
+                st.info(f"Starting ingestion of {len(selected_files)} file(s)... This will clear existing data.")
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    # Initialize Pipeline
+                    ingest_config = IngestionConfig(
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        use_semantic_chunking=(chunker_type=="semantic"),
+                        chunker_type=chunker_type,
+                        use_contextual_enrichment=contextual
                     )
                     
-                    def update_progress(current, total):
-                        progress_bar.progress(current / total)
-                        status_text.text(f"Processing document {current}/{total}...")
-                    
-                    return await pipeline.ingest_documents(progress_callback=update_progress)
+                    # We need to run async code in sync context
+                    async def run_pipeline():
+                        pipeline = DocumentIngestionPipeline(
+                            config=ingest_config,
+                            documents_folder="documents",
+                            clean_before_ingest=True
+                        )
+                        
+                        def update_progress(current, total):
+                            progress_bar.progress(current / total)
+                            status_text.text(f"Processing document {current}/{total}...")
+                        
+                        return await pipeline.ingest_documents(
+                            progress_callback=update_progress,
+                            specific_files=selected_files
+                        )
 
-                import rag_agent_advanced
-                rag_agent_advanced.db_pool = None # Reset pool
-                
-                results = asyncio.run(run_pipeline())
-                
-                st.success(f"Ingestion Complete! Processed {len(results)} documents.")
-                st.json([{"file": r.title, "chunks": r.chunks_created} for r in results])
-                
-            except Exception as e:
-                st.error(f"Ingestion Failed: {e}")
+                    import rag_agent_advanced
+                    rag_agent_advanced.db_pool = None # Reset pool
+                    
+                    results = asyncio.run(run_pipeline())
+                    
+                    st.success(f"✅ Ingestion Complete! Processed {len(results)} documents.")
+                    
+                    # Show detailed results
+                    st.subheader("📊 Ingestion Results")
+                    for r in results:
+                        if r.errors:
+                            st.error(f"❌ **{r.title}**: {r.chunks_created} chunks created, but encountered errors: {', '.join(r.errors)}")
+                        else:
+                            st.success(f"✅ **{r.title}**: {r.chunks_created} chunks created in {r.processing_time_ms:.0f}ms")
+                    
+                except Exception as e:
+                    st.error(f"❌ Ingestion Failed: {e}")
+                    import traceback
+                    with st.expander("View Error Details"):
+                        st.code(traceback.format_exc())
 
 # --- Page: Retrieval Lab ---
 
 def render_retrieval_page():
     st.header("🧪 Strategy Lab")
-    st.markdown("Design and compare up to 3 RAG strategies side-by-side.")
+    st.markdown("""
+    Compare up to 3 RAG strategies side-by-side to understand their tradeoffs.
+    
+    **What you can test:**
+    - 🔍 **Retrieval Methods:** Vector search, multi-query, hybrid, self-reflective
+    - 🎯 **Reranking:** Cross-encoder reranking for better relevance
+    - 🤖 **LLM Models:** Compare different model sizes (GPT-4o vs GPT-4o-mini)
+    - 📝 **Generation Styles:** Standard, fact verification, multi-hop reasoning, uncertainty estimation
+    """)
+    
+    st.info("💡 **Tip for Learners:** Try comparing baseline vector search vs. multi-query to see how query expansion improves results!", icon="💡")
 
     # Global Query
     user_query = st.text_area("Test Query:", height=80, placeholder="Enter a complex question about your documents...")
@@ -308,34 +472,41 @@ def render_retrieval_page():
                 
                 c1, c2 = st.columns(2)
                 with c1:
-                    # Informational only, based on active config
-                    active_conf = load_active_config()
-                    st.text_input(
+                    # Allow selecting chunking strategy
+                    chunking = st.selectbox(
                         "Chunking", 
-                        value=active_conf.get("chunker_type", "semantic"), 
-                        disabled=True, 
-                        key=f"chunk_{i}"
+                        ["semantic", "fixed", "adaptive"],
+                        index=0,
+                        key=f"chunk_{i}",
+                        help="✂️ How text was split into chunks"
                     )
-                    st.text_input(
+                    embedding = st.selectbox(
                         "Embedding",
-                        value=active_conf.get("embedding_model", "small"),
-                        disabled=True,
-                        key=f"embed_{i}"
+                        ["text-embedding-3-small", "text-embedding-3-large"],
+                        index=0,
+                        key=f"embed_{i}",
+                        help="🧠 Embedding model used"
                     )
                 with c2:
                     retrieval = st.selectbox(
                         "Retrieval",
                         ["Vector Search (Baseline)", "Multi-Query", "Hybrid (Vector + BM25)", "Self-Reflective RAG"],
                         key=f"retrieval_{i}",
-                        help="Algorithm for finding relevant information."
+                        help="🔍 **Baseline:** Simple vector similarity. **Multi-Query:** Expands query into variations. **Hybrid:** Combines vector + keyword search. **Self-Reflective:** Iteratively refines search based on relevance."
                     )
-                    rerank = st.checkbox("Reranking", key=f"rerank_{i}", help="Enable Cross-Encoder reranking.")
+                    rerank = st.checkbox("Reranking", key=f"rerank_{i}", help="🎯 Use Cross-Encoder to rerank results for better relevance (adds latency)")
 
-                llm = st.selectbox("LLM", ["gpt-4o-mini", "gpt-4o"], key=f"llm_{i}")
+                llm = st.selectbox(
+                    "LLM", 
+                    ["gpt-4o-mini", "gpt-4o"], 
+                    key=f"llm_{i}",
+                    help="🤖 **gpt-4o-mini:** Faster and cheaper. **gpt-4o:** More capable for complex reasoning."
+                )
                 gen_style = st.selectbox(
                     "Generation",
                     ["Standard", "Fact Verification", "Multi-Hop Reasoning", "Uncertainty Estimation"],
-                    key=f"gen_{i}"
+                    key=f"gen_{i}",
+                    help="📝 **Standard:** Direct answer. **Fact Verification:** Validates claims against sources. **Multi-Hop:** Breaks down complex questions. **Uncertainty:** Provides confidence scores."
                 )
                 
                 configs.append(StrategyConfig(
@@ -344,7 +515,7 @@ def render_retrieval_page():
                     reranking=rerank,
                     llm_model=llm,
                     generation_style=gen_style,
-                    chunking_strategy=active_conf.get("chunker_type", "semantic")
+                    chunking_strategy=chunking
                 ))
 
     # Run Button
@@ -392,10 +563,25 @@ def render_retrieval_page():
 # --- Main Navigation ---
 
 with st.sidebar:
-    page = st.radio("Navigation", ["Retrieval Lab", "Ingestion Lab"], index=0)
+    st.title("🧪 RAG Strategy Lab")
+    st.markdown("---")
+    
+    st.markdown("""
+    ### 👋 Welcome!
+    This tool helps you learn and compare advanced RAG strategies.
+    
+    **Quick Start:**
+    1. Upload or select documents
+    2. Configure ingestion settings
+    3. Test different RAG strategies
+    """)
+    
+    st.markdown("---")
+    
+    page = st.radio("Navigation", ["Ingestion Lab", "Strategy Lab"], index=0)
     st.divider()
-    st.button("Toggle Theme", on_click=toggle_theme)
-    st.write(f"Theme: **{st.session_state.theme.title()}**")
+    st.button("🎨 Toggle Theme", on_click=toggle_theme, use_container_width=True)
+    st.caption(f"Current Theme: **{st.session_state.theme.title()}**")
 
 if page == "Ingestion Lab":
     render_ingestion_page()

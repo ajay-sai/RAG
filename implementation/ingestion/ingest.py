@@ -94,13 +94,15 @@ class DocumentIngestionPipeline:
     
     async def ingest_documents(
         self,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        specific_files: Optional[List[str]] = None
     ) -> List[IngestionResult]:
         """
         Ingest all documents from the documents folder.
         
         Args:
             progress_callback: Optional callback for progress updates
+            specific_files: Optional list of specific filenames to ingest (relative to documents_folder)
         
         Returns:
             List of ingestion results
@@ -113,7 +115,15 @@ class DocumentIngestionPipeline:
             await self._clean_databases()
         
         # Find all supported document files
-        document_files = self._find_document_files()
+        if specific_files:
+            # Use specific files provided
+            document_files = [
+                os.path.join(self.documents_folder, f) 
+                for f in specific_files 
+                if os.path.exists(os.path.join(self.documents_folder, f))
+            ]
+        else:
+            document_files = self._find_document_files()
 
         if not document_files:
             logger.warning(
