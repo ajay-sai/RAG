@@ -9,22 +9,46 @@ from dataclasses import dataclass
 # Add implementation directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Check for required environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+def check_environment():
+    """Check if required environment variables are set."""
+    errors = []
+    warnings = []
+    
+    if not os.getenv('DATABASE_URL'):
+        errors.append("DATABASE_URL is not set in .env file")
+    
+    if not os.getenv('OPENAI_API_KEY'):
+        warnings.append("OPENAI_API_KEY is not set - RAG functionality will be limited")
+    
+    return errors, warnings
+
+env_errors, env_warnings = check_environment()
+
 # Import backend logic
-from rag_agent_advanced import (
-    initialize_db,
-    close_db,
-    db_pool,
-    initialize_reranker,
-    initialize_bm25,
-    search_knowledge_base,
-    search_with_multi_query,
-    search_with_hybrid_retrieval,
-    search_with_reranking,
-    search_with_self_reflection,
-)
-from ingestion.ingest import DocumentIngestionPipeline
-from utils.models import IngestionConfig
-from utils.config_manager import save_active_config, load_active_config
+try:
+    from rag_agent_advanced import (
+        initialize_db,
+        close_db,
+        db_pool,
+        initialize_reranker,
+        initialize_bm25,
+        search_knowledge_base,
+        search_with_multi_query,
+        search_with_hybrid_retrieval,
+        search_with_reranking,
+        search_with_self_reflection,
+    )
+    from ingestion.ingest import DocumentIngestionPipeline
+    from utils.models import IngestionConfig
+    from utils.config_manager import save_active_config, load_active_config
+    IMPORTS_SUCCESSFUL = True
+except ImportError as e:
+    IMPORTS_SUCCESSFUL = False
+    IMPORT_ERROR = str(e)
 
 # Page config
 st.set_page_config(
@@ -252,6 +276,11 @@ def estimate_cost(config: StrategyConfig) -> str:
 # --- Page: Ingestion Lab ---
 
 def render_ingestion_page():
+    if not IMPORTS_SUCCESSFUL:
+        st.error("❌ Cannot load ingestion modules. Please ensure all dependencies are installed.")
+        st.code("pip install -r requirements-advanced.txt", language="bash")
+        return
+    
     st.header("📥 Ingestion Lab")
     st.markdown("""
     Transform your documents into searchable knowledge. This lab processes documents through:
@@ -445,6 +474,11 @@ def render_ingestion_page():
 # --- Page: Retrieval Lab ---
 
 def render_retrieval_page():
+    if not IMPORTS_SUCCESSFUL:
+        st.error("❌ Cannot load RAG modules. Please ensure all dependencies are installed.")
+        st.code("pip install -r requirements-advanced.txt", language="bash")
+        return
+    
     st.header("🧪 Strategy Lab")
     st.markdown("""
     Compare up to 3 RAG strategies side-by-side to understand their tradeoffs.
@@ -565,6 +599,19 @@ def render_retrieval_page():
 with st.sidebar:
     st.title("🧪 RAG Strategy Lab")
     st.markdown("---")
+    
+    # Show environment warnings/errors
+    if env_errors:
+        for error in env_errors:
+            st.error(f"⚠️ {error}")
+    
+    if env_warnings:
+        for warning in env_warnings:
+            st.warning(f"ℹ️ {warning}")
+    
+    if not IMPORTS_SUCCESSFUL:
+        st.error(f"❌ Import Error: {IMPORT_ERROR}")
+        st.info("Some dependencies may be missing. Run: `pip install -r requirements-advanced.txt`")
     
     st.markdown("""
     ### 👋 Welcome!
