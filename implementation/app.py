@@ -153,9 +153,9 @@ async def execute_pipeline(config: StrategyConfig, query: str) -> Dict[str, Any]
         else:
             retrieval_result = await search_knowledge_base(None, query, limit=5)
 
-        # 2. Reranking
+        # 2. Reranking (only applies to Vector Search baseline)
         if config.reranking and config.retrieval_method == "Vector Search (Baseline)":
-             retrieval_result = await search_with_reranking(None, query, limit=5)
+            retrieval_result = await search_with_reranking(None, query, limit=5)
         
         # 3. Generation
         final_output = retrieval_result
