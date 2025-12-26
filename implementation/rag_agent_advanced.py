@@ -12,7 +12,7 @@ Implements multiple RAG strategies:
 
 import asyncio
 try:
-    import asyncpg
+    import asyncpg  # type: ignore[import]
 except Exception:
     asyncpg = None
 import logging
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 try:
-    from pydantic_ai import Agent, RunContext
+    from pydantic_ai import Agent, RunContext  # type: ignore[import]
 except Exception:
     # pydantic_ai is optional in test environments
     class Agent:
@@ -36,7 +36,7 @@ except Exception:
         def __init__(self, *a, **k):
             pass
 try:
-    from sentence_transformers import CrossEncoder
+    from sentence_transformers import CrossEncoder  # type: ignore[import]
 except Exception:
     class CrossEncoder:
         def __init__(self, *a, **k):
@@ -45,7 +45,7 @@ except Exception:
             return [0.0] * len(pairs)
 
 try:
-    from rank_bm25 import BM25Okapi
+    from rank_bm25 import BM25Okapi  # type: ignore[import]
 except Exception:
     class BM25Okapi:
         def __init__(self, corpus):
@@ -183,7 +183,7 @@ async def expand_query_variations(
     Returns:
         List of query variations including the original
     """
-    from openai import AsyncOpenAI
+    from openai import AsyncOpenAI  # type: ignore[import]
     client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     expansion_prompt = f"""Generate 3 different variations of this search query.
@@ -611,7 +611,7 @@ async def search_with_self_reflection(
         if not db_pool:
             await initialize_db()
 
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # type: ignore[import]
         from ingestion.embedder import create_embedder
 
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -706,21 +706,6 @@ Respond with only the improved query, nothing else."""
                 f"\n[Reflection: Results deemed relevant (score: {grade_score}/5)]\n"
             )
 
-        # Aggregate tokens in the non-refinement path as well
-        token_components = []
-        if isinstance(meta.get('embedding_tokens'), int):
-            token_components.append(int(meta['embedding_tokens']))
-        if isinstance(meta.get('grade_tokens'), int):
-            token_components.append(int(meta['grade_tokens']))
-        if isinstance(meta.get('refine_tokens'), int):
-            token_components.append(int(meta['refine_tokens']))
-        if token_components and 'total_tokens' not in meta:
-            meta['total_tokens'] = sum(token_components)
-            meta['tokens_breakdown'] = {
-                'embedding_tokens': meta.get('embedding_tokens'),
-                'grade_tokens': meta.get('grade_tokens'),
-                'refine_tokens': meta.get('refine_tokens')
-            }
 
         # Format final results
         response_parts = []
@@ -743,7 +728,7 @@ async def search_with_self_reflection_meta(ctx: RunContext[None], query: str, li
     """Wrapper returning formatted results and metadata for self-reflective search."""
     try:
         # We'll re-run the existing function but instrument token usage where possible
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # type: ignore[import]
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         # Run the existing flow but capture grade and refine usages
@@ -1030,7 +1015,7 @@ async def answer_with_fact_verification(ctx: RunContext[None], query: str) -> st
     Generates an answer and then verifies claims against retrieved evidence.
     """
     try:
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # type: ignore[import]
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         # 1. Retrieve initial context
@@ -1088,7 +1073,7 @@ async def answer_with_multi_hop(
         A comprehensive answer derived from multiple sources.
     """
     try:
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # type: ignore[import]
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         accumulated_context = []
@@ -1152,7 +1137,7 @@ async def answer_with_uncertainty(
     Estimates uncertainty by generating multiple answers and checking for consistency.
     """
     try:
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI  # type: ignore[import]
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         from ingestion.embedder import create_embedder
         embedder = create_embedder()

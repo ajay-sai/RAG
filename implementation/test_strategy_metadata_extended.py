@@ -1,5 +1,5 @@
 import asyncio
-import pytest
+import pytest  # type: ignore[import]
 from app import StrategyConfig, execute_pipeline
 
 async def dummy_hybrid(ctx, query, limit=5):
@@ -8,7 +8,10 @@ async def dummy_hybrid(ctx, query, limit=5):
 async def dummy_self_reflection(ctx, query, limit=5):
     return {"formatted": "Found 1 self-reflection result.", "meta": {"total_tokens": 45, "grade_score": 4}}
 
-def test_hybrid_total_tokens(monkeypatch):
+import pytest  # type: ignore[import]
+
+@pytest.mark.asyncio
+async def test_hybrid_total_tokens(monkeypatch):
     # Patch the app-level function with an async callable so it can be awaited
     monkeypatch.setattr('app.search_with_hybrid_retrieval_meta', dummy_hybrid)
 
@@ -21,12 +24,13 @@ def test_hybrid_total_tokens(monkeypatch):
         chunking_strategy='semantic'
     )
 
-    res = asyncio.run(execute_pipeline(config, 'test hybrid'))
+    res = await execute_pipeline(config, 'test hybrid')
     assert res['status'] == 'Success'
     assert 'meta' in res
     assert res['meta'].get('total_tokens') == 123
 
-def test_self_reflection_total_tokens(monkeypatch):
+@pytest.mark.asyncio
+async def test_self_reflection_total_tokens(monkeypatch):
     # Patch the app-level function with an async callable so it can be awaited
     monkeypatch.setattr('app.search_with_self_reflection_meta', dummy_self_reflection)
 
@@ -39,7 +43,7 @@ def test_self_reflection_total_tokens(monkeypatch):
         chunking_strategy='semantic'
     )
 
-    res = asyncio.run(execute_pipeline(config, 'test self'))
+    res = await execute_pipeline(config, 'test self')
     assert res['status'] == 'Success'
     assert 'meta' in res
     assert res['meta'].get('total_tokens') == 45
