@@ -132,5 +132,5 @@ When asked to modify or explain specific strategies, refer to these definitions:
 *   **Debugging Ingestion:** Check `ingestion/ingest.py` and `ingestion/chunker.py`. Docling integration is central here.
 *   **Modifying Database Schema:** Update `sql/schema.sql`. Note that schema changes may require clearing existing data.
 *   **Testing Changes:** Run `pytest test_lora_shift_ingestion.py -v` to validate ingestion pipeline.
-*   **Troubleshooting:** Refer to `TROUBLESHOOTING.md` for common issues and solutions.
-*   **Learning RAG:** Follow the structured path in `STUDENT_GUIDE.md` (9-week curriculum).
+*   **Troubleshooting:** Refer to `../guides/TROUBLESHOOTING.md` for common issues and solutions.
+*   **Learning RAG:** Follow the structured path in `../guides/STUDENT_GUIDE.md` (9-week curriculum).

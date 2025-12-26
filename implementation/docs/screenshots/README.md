@@ -107,8 +107,8 @@ pytest test_lora_shift_ingestion.py -v
 
 For detailed expected outputs and feature descriptions without requiring live setup, see:
 - **README.md** (this file) - Screenshot organization, guidance, and expected outputs
-- **../../STUDENT_GUIDE.md** - Complete learning curriculum with practical examples
-- **../../TROUBLESHOOTING.md** - Problem-solving guide
+- **../../docs/guides/STUDENT_GUIDE.md** - Complete learning curriculum with practical examples
+- **../../docs/guides/TROUBLESHOOTING.md** - Problem-solving guide
 
 ---
 

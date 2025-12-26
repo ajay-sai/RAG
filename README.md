@@ -6,8 +6,8 @@ This repository demonstrates 16 RAG strategies with:
 - 📖 Detailed theory and research ([docs/](docs/))
 - 💻 Simple pseudocode examples ([examples/](examples/))
 - 🔧 Full code examples ([implementation/](implementation/))
-- 🎓 **Student learning guide** ([STUDENT_GUIDE.md](STUDENT_GUIDE.md))
-- 🔧 **Troubleshooting guide** ([TROUBLESHOOTING.md](TROUBLESHOOTING.md))
+- 🎓 **Student learning guide** ([docs/guides/STUDENT_GUIDE.md](docs/guides/STUDENT_GUIDE.md))
+- 🔧 **Troubleshooting guide** ([docs/guides/TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md))
 
 Perfect for: AI engineers, ML practitioners, data science students, and anyone building RAG systems.
 
@@ -139,7 +139,7 @@ python rag_agent_advanced.py
 This repository includes comprehensive learning resources:
 
 ### 📖 Student Guide
-**[STUDENT_GUIDE.md](STUDENT_GUIDE.md)** - Your complete learning path:
+**[docs/guides/STUDENT_GUIDE.md](docs/guides/STUDENT_GUIDE.md)** - Your complete learning path:
 - Structured 9-week curriculum from beginner to advanced
 - Core concepts explained with examples
 - Practical exercises and project ideas
@@ -156,7 +156,7 @@ Week 9+:   Specialized topics (knowledge graphs, fine-tuning)
 ```
 
 ### 🔧 Troubleshooting Guide
-**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions to common issues:
+**[docs/guides/TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md)** - Solutions to common issues:
 - Setup problems (dependencies, database, API keys)
 - Ingestion errors (file processing, embeddings, memory)
 - Retrieval issues (no results, low relevance, slow queries)
@@ -1032,7 +1032,7 @@ psql $DATABASE_URL -c "CREATE EXTENSION IF NOT EXISTS vector;"
 # - Rebuild index: python -m ingestion.ingest --documents ./documents
 ```
 
-**For detailed solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
+**For detailed solutions, see [docs/guides/TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md)**
 
 ---
 
