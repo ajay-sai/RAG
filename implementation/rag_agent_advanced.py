@@ -82,24 +82,27 @@ def _extract_total_tokens(resp) -> int | None:
         # OpenAI style: resp.usage.total_tokens
         if hasattr(resp, 'usage') and getattr(resp.usage, 'total_tokens', None) is not None:
             return int(getattr(resp.usage, 'total_tokens'))
-    except Exception:
-        pass
+    except Exception as exc:
+        # Best-effort extraction; log and fall back to other response shapes.
+        logger.debug("Failed to extract total_tokens from resp.usage attribute", exc_info=True)
 
     try:
         # dict-like: resp['usage']['total_tokens']
         if isinstance(resp, dict) and resp.get('usage') and isinstance(resp['usage'], dict):
             if 'total_tokens' in resp['usage']:
                 return int(resp['usage']['total_tokens'])
-    except Exception:
-        pass
+    except Exception as exc:
+        # Best-effort extraction; log and fall back to other response shapes.
+        logger.debug("Failed to extract total_tokens from dict-style resp['usage']", exc_info=True)
 
     try:
         # resp.get('usage', {}).get('total_tokens') fallback
         usage = getattr(resp, 'get', lambda k, d=None: None)('usage')
         if isinstance(usage, dict) and 'total_tokens' in usage:
             return int(usage['total_tokens'])
-    except Exception:
-        pass
+    except Exception as exc:
+        # Final best-effort extraction; log and return None.
+        logger.debug("Failed to extract total_tokens using generic resp.get('usage') pattern", exc_info=True)
 
     return None
 
