@@ -55,7 +55,7 @@ class TestLoRAShiftIngestion:
             "rank", "matrix", "efficiency", "performance"
         ]
         found_terms = sum(1 for term in technical_terms if term.lower() in sample_paper_content.lower())
-        assert found_terms >= 5, f"Paper should contain technical terminology, found {found_terms}/8 terms"
+        assert found_terms >= 5, f"Paper should contain technical terminology, found {found_terms}/{len(technical_terms)} terms"
 
 
 class TestChunkingLogic:
@@ -328,6 +328,8 @@ class TestDocumentMetadata:
         assert metadata["format"] == ".md", "Should detect markdown format"
         if doc_path.exists():
             assert metadata["size"] > 0, "Should extract file size"
+        else:
+            assert metadata["size"] == 0, "Non-existent file should have size 0"
     
     def test_metadata_storage(self):
         """Test that metadata is properly structured for storage."""
