@@ -388,8 +388,7 @@ def clean_output(text: str) -> str:
     if not text:
         return text
     # Remove leading 'Answer:' and similar wrappers
-    text = re.sub(r"^\s*Answer:\s*\n?", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"^\s*Answer\s*:\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^\s*Answer\s*:\s*\n?", "", text, flags=re.IGNORECASE)
     return text.strip()
 
 # --- Page: Ingestion Lab ---
