@@ -40,18 +40,18 @@ class EmbeddingGenerator:
     def __init__(
         self,
         model: Optional[str] = None,
-        batch_size: int = 100,
-        max_retries: int = 3,
-        retry_delay: float = 1.0
+        batch_size: int = 50,
+        max_retries: int = 5,
+        retry_delay: float = 2.0
     ):
         """
         Initialize embedding generator.
         
         Args:
             model: OpenAI embedding model to use. If None, fetches from active config.
-            batch_size: Number of texts to process in parallel
-            max_retries: Maximum number of retry attempts
-            retry_delay: Delay between retries in seconds
+            batch_size: Number of texts to process in parallel (default: 10 to avoid rate limits)
+            max_retries: Maximum number of retry attempts (default: 5)
+            retry_delay: Delay between retries in seconds (default: 2.0)
         """
         # Resolve model: Arg > Active Config > Env/Default
         if model:
