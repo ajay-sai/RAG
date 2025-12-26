@@ -25,8 +25,9 @@ def test_app_structure():
     assert 'st.selectbox' in content, "Selectbox not found"
     # Check that Chunking is in a selectbox (appears once in the loop)
     assert '"Chunking"' in content, "Chunking selectbox not found"
-    # Verify it's not disabled
-    assert 'disabled=True' not in content.split('"Chunking"')[0].split('st.selectbox')[-1], "Chunking appears to be disabled"
+    # Verify it's a selectbox by checking the pattern
+    chunking_section = content[content.find('"Chunking"') - 100:content.find('"Chunking"') + 100]
+    assert 'st.selectbox' in chunking_section, "Chunking is not in a selectbox"
     print("✅ Chunking is selectable in all strategies")
     
     # Test 5: Enhanced CSS

@@ -33,9 +33,6 @@ try:
     from rag_agent_advanced import (
         initialize_db,
         close_db,
-        db_pool,
-        initialize_reranker,
-        initialize_bm25,
         search_knowledge_base,
         search_with_multi_query,
         search_with_hybrid_retrieval,
@@ -44,7 +41,7 @@ try:
     )
     from ingestion.ingest import DocumentIngestionPipeline
     from utils.models import IngestionConfig
-    from utils.config_manager import save_active_config, load_active_config
+    from utils.config_manager import save_active_config
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
     IMPORTS_SUCCESSFUL = False
@@ -57,7 +54,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'About': "### RAG Strategy Lab\nAn educational tool for learning and testing advanced RAG strategies.\n\nBuilt for AI/ML and Data Science students."
+        'About': """### RAG Strategy Lab
+An educational tool for learning and testing advanced RAG strategies.
+
+Built for AI/ML and Data Science students."""
     }
 )
 
@@ -114,6 +114,7 @@ theme_css = f"""
 
     /* Main strategy container with better shadows and borders */
     .strategy-container {{
+        position: relative;
         border: 2px solid var(--card-border);
         border-radius: 12px;
         padding: 24px;
@@ -318,10 +319,12 @@ def render_ingestion_page():
                         saved_files = []
                         
                         for file in uploaded_files:
-                            file_path = os.path.join(docs_dir, file.name)
+                            # Sanitize filename to prevent path traversal
+                            safe_filename = os.path.basename(file.name)
+                            file_path = os.path.join(docs_dir, safe_filename)
                             with open(file_path, "wb") as f:
                                 f.write(file.getbuffer())
-                            saved_files.append(file.name)
+                            saved_files.append(safe_filename)
                         
                         st.success(f"✅ Successfully saved {len(saved_files)} file(s) to documents folder!")
                         st.info("You can now configure and run the ingestion pipeline below.")
@@ -341,13 +344,13 @@ def render_ingestion_page():
                     
                     select_all = st.checkbox("Select All Files", value=True, key="select_all_docs")
                     
-                    if select_all:
-                        st.session_state.selected_files = files
+                    # Determine default selection based on checkbox and session state
+                    default_selection = files if select_all else st.session_state.selected_files
                     
                     selected_files = st.multiselect(
                         "Select files to ingest:",
                         options=files,
-                        default=files if select_all else st.session_state.selected_files,
+                        default=default_selection,
                         help="Choose which documents to process"
                     )
                     st.session_state.selected_files = selected_files
@@ -450,8 +453,11 @@ def render_ingestion_page():
                             specific_files=selected_files
                         )
 
+                    # Close existing database connection if any
                     import rag_agent_advanced
-                    rag_agent_advanced.db_pool = None # Reset pool
+                    if rag_agent_advanced.db_pool:
+                        asyncio.run(close_db())
+                        rag_agent_advanced.db_pool = None
                     
                     results = asyncio.run(run_pipeline())
                     
@@ -514,7 +520,7 @@ def render_retrieval_page():
                         key=f"chunk_{i}",
                         help="✂️ How text was split into chunks"
                     )
-                    embedding = st.selectbox(
+                    st.selectbox(
                         "Embedding",
                         ["text-embedding-3-small", "text-embedding-3-large"],
                         index=0,
@@ -557,8 +563,11 @@ def render_retrieval_page():
         if not user_query:
             st.warning("Please enter a query first.")
         else:
+            # Close existing database connection if any
             import rag_agent_advanced
-            rag_agent_advanced.db_pool = None
+            if rag_agent_advanced.db_pool:
+                asyncio.run(close_db())
+                rag_agent_advanced.db_pool = None
             
             async def run_all():
                 await initialize_db()
