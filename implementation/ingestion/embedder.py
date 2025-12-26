@@ -100,11 +100,15 @@ class EmbeddingGenerator:
                 )
                 # Capture token usage if present on response
                 try:
-                    self.last_usage = None
-                    if hasattr(response, 'usage') and getattr(response.usage, 'total_tokens', None) is not None:
-                        self.last_usage = int(getattr(response.usage, 'total_tokens'))
-                    elif isinstance(response, dict) and response.get('usage') and isinstance(response['usage'], dict):
-                        self.last_usage = int(response['usage'].get('total_tokens')) if response['usage'].get('total_tokens') else None
+                    total_tokens = None
+                    if hasattr(response, "usage"):
+                        total_tokens = getattr(response.usage, "total_tokens", None)
+                    elif isinstance(response, dict):
+                        usage = response.get("usage")
+                        if isinstance(usage, dict):
+                            total_tokens = usage.get("total_tokens")
+
+                    self.last_usage = int(total_tokens) if total_tokens is not None else None
                 except Exception:
                     self.last_usage = None
                 

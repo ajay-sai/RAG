@@ -13,7 +13,6 @@ except Exception:
     st.markdown = lambda *a, **k: None
     st.rerun = lambda *a, **k: None
     # session_state should support attribute access
-    import types
     st.session_state = types.SimpleNamespace()
     st.session_state.theme = 'light'
     st.columns = lambda n: [_DummyCtx() for _ in range(n)]
@@ -36,25 +35,13 @@ except Exception:
     st.subheader = lambda *a, **k: None
     st.caption = lambda *a, **k: None
     st.slider = lambda *a, **k: a[3] if len(a) >= 4 else None
-    st.selectbox = lambda *a, **k: a[1][0] if len(a) > 1 and a[1] else None
-    st.columns = lambda n: [_DummyCtx() for _ in range(n)]
-    st.set_page_config = lambda *a, **k: None
-    st.markdown = lambda *a, **k: None
-    st.code = lambda *a, **k: None
-    st.caption = lambda *a, **k: None
-    st.info = lambda *a, **k: None
     st.spinner = lambda *a, **k: types.SimpleNamespace(__enter__=lambda s: s, __exit__=lambda *args: False)
     st.divider = lambda *a, **k: None
-    st.button = lambda *a, **k: False
     st.title = lambda *a, **k: None
-    st.divider = lambda *a, **k: None
     st.write = lambda *a, **k: None
-    st.code = lambda *a, **k: None
-    st.warning = lambda *a, **k: None
     st.run = lambda *a, **k: None
     st.radio = lambda *a, **k: a[1][0] if len(a) > 1 and a[1] else None
-    st.file_uploader = lambda *a, **k: []
-    st.selectbox = lambda *a, **k: a[1][0] if len(a) > 1 and a[1] else None
+    st.code = lambda *a, **k: None
 import asyncio
 import time
 import os
@@ -370,7 +357,8 @@ async def execute_pipeline(config: StrategyConfig, query: str) -> Dict[str, Any]
             "status": "Error",
             "error": str(e),
             "duration": (time.time() - overall_start) * 1000,
-            "name": config.name
+            "name": config.name,
+            "meta": meta
         }
 
 def estimate_cost(config: StrategyConfig) -> str:

@@ -322,7 +322,7 @@ async def search_with_multi_query_meta(ctx: RunContext[None], query: str, limit:
         response_parts = []
         top_sources = []
         for row in unique_results:
-            response_parts.append(f"[Source: {row['document_title']}\n]{row['content']}\n")
+            response_parts.append(f"[Source: {row['document_title']}]\n{row['content']}\n")
             top_sources.append(row.get('document_title'))
         formatted = (f"Found {len(response_parts)} relevant results:\n\n" + "\n---\n".join(response_parts))
         meta = {"queries": queries, "requested_limit": limit, "returned": len(response_parts), "top_sources": top_sources}
@@ -797,21 +797,21 @@ async def search_with_self_reflection_meta(ctx: RunContext[None], query: str, li
             refined_query = refine_res.choices[0].message.content.strip()
             meta.update({"refined_query": refined_query, "refine_tokens": refine_tokens})
 
-            # Compute aggregated token totals where possible
-            token_components = []
-            if isinstance(meta.get('embedding_tokens'), int):
-                token_components.append(int(meta['embedding_tokens']))
-            if isinstance(meta.get('grade_tokens'), int):
-                token_components.append(int(meta['grade_tokens']))
-            if isinstance(meta.get('refine_tokens'), int):
-                token_components.append(int(meta['refine_tokens']))
-            if token_components:
-                meta['total_tokens'] = sum(token_components)
-                meta['tokens_breakdown'] = {
-                    'embedding_tokens': meta.get('embedding_tokens'),
-                    'grade_tokens': meta.get('grade_tokens'),
-                    'refine_tokens': meta.get('refine_tokens')
-                }
+        # Compute aggregated token totals where possible
+        token_components = []
+        if isinstance(meta.get('embedding_tokens'), int):
+            token_components.append(int(meta['embedding_tokens']))
+        if isinstance(meta.get('grade_tokens'), int):
+            token_components.append(int(meta['grade_tokens']))
+        if isinstance(meta.get('refine_tokens'), int):
+            token_components.append(int(meta['refine_tokens']))
+        if token_components:
+            meta['total_tokens'] = sum(token_components)
+            meta['tokens_breakdown'] = {
+                'embedding_tokens': meta.get('embedding_tokens'),
+                'grade_tokens': meta.get('grade_tokens'),
+                'refine_tokens': meta.get('refine_tokens')
+            }
 
         # Format results
         response_parts = [f"[Source: {r['document_title']}]\n{r['content']}\n" for r in results]
@@ -876,7 +876,7 @@ async def search_with_hybrid_retrieval(
             fused_scores[chunk_id] += 1 / (k + i + 1)
 
         for i, doc in enumerate(sparse_results):
-            chunk_id = doc["chunk_id"]
+            chunk_id = str(doc["chunk_id"])
             if chunk_id not in fused_scores:
                 fused_scores[chunk_id] = 0
             fused_scores[chunk_id] += 1 / (k + i + 1)
@@ -968,7 +968,7 @@ async def search_with_hybrid_retrieval_meta(ctx: RunContext[None], query: str, l
             fused_scores[chunk_id] = fused_scores.get(chunk_id, 0) + 1 / (k + i + 1)
 
         for i, doc in enumerate(sparse_results):
-            chunk_id = doc["chunk_id"]
+            chunk_id = str(doc["chunk_id"])
             fused_scores[chunk_id] = fused_scores.get(chunk_id, 0) + 1 / (k + i + 1)
 
         sorted_fused = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)[:limit]

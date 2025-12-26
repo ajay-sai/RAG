@@ -1,4 +1,3 @@
-import asyncio
 import pytest  # type: ignore[import]
 from app import StrategyConfig, execute_pipeline
 
@@ -7,8 +6,6 @@ async def dummy_hybrid(ctx, query, limit=5):
 
 async def dummy_self_reflection(ctx, query, limit=5):
     return {"formatted": "Found 1 self-reflection result.", "meta": {"total_tokens": 45, "grade_score": 4}}
-
-import pytest  # type: ignore[import]
 
 @pytest.mark.asyncio
 async def test_hybrid_total_tokens(monkeypatch):

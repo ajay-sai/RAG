@@ -1,8 +1,5 @@
-import asyncio
 import pytest  # type: ignore[import]
 from rag_agent_advanced import search_with_hybrid_retrieval_meta, search_with_self_reflection_meta
-
-import pytest  # type: ignore[import]
 
 @pytest.mark.asyncio
 async def test_hybrid_meta_returns_structure(monkeypatch):
@@ -19,9 +16,9 @@ async def test_hybrid_meta_returns_structure(monkeypatch):
     class DummyPool:
         def acquire(self):
             class Ctx:
-                async def __aenter__(self_):
+                async def __aenter__(self):
                     return DummyConn()
-                async def __aexit__(self_, exc_type, exc, tb):
+                async def __aexit__(self, exc_type, exc, tb):
                     pass
             return Ctx()
 
@@ -44,9 +41,9 @@ async def test_self_reflection_meta_structure(monkeypatch):
     class DummyPool:
         def acquire(self):
             class Ctx:
-                async def __aenter__(self_):
+                async def __aenter__(self):
                     return DummyConn()
-                async def __aexit__(self_, exc_type, exc, tb):
+                async def __aexit__(self, exc_type, exc, tb):
                     pass
             return Ctx()
 

@@ -1,6 +1,4 @@
-import asyncio
 import pytest
-from rag_agent_advanced import search_with_multi_query_meta
 
 # Simple async stub functions to avoid external dependencies
 async def dummy_meta_search(ctx, query, limit=5):
