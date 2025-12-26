@@ -123,6 +123,7 @@ try:
         search_with_self_reflection_meta,
     )
     from ingestion.ingest import DocumentIngestionPipeline
+    from ingestion.resource_monitor import ResourceMonitor, IngestionMode
     from utils.models import IngestionConfig
     from utils.config_manager import save_active_config
     IMPORTS_SUCCESSFUL = True
@@ -579,8 +580,40 @@ def render_ingestion_page():
             "Use Contextual Enrichment", 
             value=False,
             help="🎯 Uses an LLM to add document-level context to each chunk before embedding. Improves retrieval accuracy but increases cost and processing time. (Anthropic's Contextual Retrieval technique)"
+        )        
+        # Ingestion mode selection
+        st.markdown("### 🎯 Ingestion Mode")
+        st.markdown("""
+        Choose how documents are processed based on your system resources:
+        - **Auto-Detect**: Automatically select best mode based on available RAM
+        - **Full**: All features (Whisper Turbo, OCR, enrichment) - needs 8GB+ RAM
+        - **Standard**: Whisper Base, OCR, no enrichment - needs 4GB+ RAM  
+        - **Light**: Whisper Tiny, no OCR/enrichment - needs 2GB+ RAM
+        - **Minimal**: Skip audio/images, text only - works with any RAM
+        """)
+        
+        ingestion_mode_str = st.selectbox(
+            "Select Ingestion Mode",
+            options=["auto", "full", "standard", "light", "minimal"],
+            index=0,
+            help="Auto-detect will check your system resources and choose the best mode"
         )
-
+        
+        # Show resource summary if not auto
+        if st.button("📊 Check System Resources"):
+            with st.spinner("Checking system resources..."):
+                resources = ResourceMonitor.get_system_resources()
+                recommended_mode = ResourceMonitor.recommend_ingestion_mode()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Available Memory", f"{resources.get('memory_available_gb', 0):.1f} GB")
+                with col2:
+                    st.metric("Free Disk", f"{resources.get('disk_free_gb', 0):.1f} GB")
+                with col3:
+                    st.metric("CPU Usage", f"{resources.get('cpu_percent', 0):.1f}%")
+                
+                st.info(f"✅ Recommended mode: **{recommended_mode.value.upper()}**")
         if st.button("🔄 Run Ingestion Pipeline", type="primary"):
             # Check if files are selected
             selected_files = st.session_state.get('selected_files', [])
@@ -604,6 +637,22 @@ def render_ingestion_page():
                 status_text = st.empty()
                 
                 try:
+                    # Parse ingestion mode
+                    ingestion_mode = None
+                    auto_detect = False
+                    if ingestion_mode_str == "auto":
+                        auto_detect = True
+                        st.info("🔍 Auto-detecting best ingestion mode based on system resources...")
+                    else:
+                        mode_map = {
+                            "full": IngestionMode.FULL,
+                            "standard": IngestionMode.STANDARD,
+                            "light": IngestionMode.LIGHT,
+                            "minimal": IngestionMode.MINIMAL,
+                        }
+                        ingestion_mode = mode_map[ingestion_mode_str]
+                        st.info(f"🎯 Using **{ingestion_mode_str.upper()}** mode")
+                    
                     # Initialize Pipeline
                     ingest_config = IngestionConfig(
                         chunk_size=chunk_size,
@@ -618,8 +667,15 @@ def render_ingestion_page():
                         pipeline = DocumentIngestionPipeline(
                             config=ingest_config,
                             documents_folder=os.path.join(os.path.dirname(__file__), "documents"),
-                            clean_before_ingest=True
+                            clean_before_ingest=True,
+                            ingestion_mode=ingestion_mode,
+                            auto_detect_mode=auto_detect
                         )
+                        
+                        # Show detected mode if auto
+                        if auto_detect:
+                            detected_mode_name = pipeline.ingestion_mode.value.upper()
+                            status_text.text(f"🎯 Detected mode: {detected_mode_name}")
                         
                         def update_progress(current, total):
                             progress_bar.progress(current / total)

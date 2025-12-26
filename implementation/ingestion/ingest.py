@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from .chunker import ChunkingConfig, create_chunker, DocumentChunk
 from .embedder import create_embedder
 from .contextual_enrichment import create_contextual_enricher
+from .resource_monitor import ResourceMonitor, IngestionMode
 
 # Import utilities
 try:
@@ -42,7 +43,9 @@ class DocumentIngestionPipeline:
         self,
         config: IngestionConfig,
         documents_folder: str = "documents",
-        clean_before_ingest: bool = True
+        clean_before_ingest: bool = True,
+        ingestion_mode: Optional[IngestionMode] = None,
+        auto_detect_mode: bool = True
     ):
         """
         Initialize ingestion pipeline.
@@ -51,10 +54,28 @@ class DocumentIngestionPipeline:
             config: Ingestion configuration
             documents_folder: Folder containing markdown documents
             clean_before_ingest: Whether to clean existing data before ingestion (default: True)
+            ingestion_mode: Force specific ingestion mode (None = auto-detect)
+            auto_detect_mode: Automatically detect best mode based on resources
         """
         self.config = config
         self.documents_folder = documents_folder
         self.clean_before_ingest = clean_before_ingest
+        
+        # Determine ingestion mode
+        if auto_detect_mode and not ingestion_mode:
+            self.ingestion_mode = ResourceMonitor.recommend_ingestion_mode()
+            logger.info(f"Auto-detected ingestion mode: {self.ingestion_mode.value}")
+        elif ingestion_mode:
+            self.ingestion_mode = ingestion_mode
+            logger.info(f"Using specified ingestion mode: {self.ingestion_mode.value}")
+        else:
+            self.ingestion_mode = IngestionMode.FULL
+            logger.info("Using default FULL ingestion mode")
+        
+        # Override config based on ingestion mode
+        config.use_contextual_enrichment = (
+            ResourceMonitor.should_enable_contextual_enrichment(self.ingestion_mode)
+        )
         
         # Initialize components
         self.chunker_config = ChunkingConfig(
@@ -289,8 +310,16 @@ class DocumentIngestionPipeline:
             "*.pptx", "*.ppt",  # PowerPoint
             "*.xlsx", "*.xls",  # Excel
             "*.html", "*.htm",  # HTML
-            "*.mp3", "*.wav", "*.m4a", "*.flac",  # Audio formats
         ]
+        
+        # Add audio patterns only if mode supports it
+        if ResourceMonitor.should_process_audio(self.ingestion_mode):
+            patterns.extend(["*.mp3", "*.wav", "*.m4a", "*.flac"])
+        else:
+            logger.info(
+                f"Skipping audio files in {self.ingestion_mode.value} mode"
+            )
+        
         files = []
 
         for pattern in patterns:
@@ -368,59 +397,101 @@ class DocumentIngestionPipeline:
                     return (f.read(), None)
 
     def _transcribe_audio(self, file_path: str) -> str:
-        """Transcribe audio file using Whisper ASR via Docling."""
-        try:
-            from pathlib import Path
-            from docling.document_converter import (
-                DocumentConverter, AudioFormatOption
+        """
+        Transcribe audio file using Whisper ASR via Docling.
+        Uses adaptive model selection with retry/fallback logic.
+        """
+        from pathlib import Path
+        from docling.document_converter import (
+            DocumentConverter, AudioFormatOption
+        )
+        from docling.datamodel.pipeline_options import AsrPipelineOptions
+        from docling.datamodel import asr_model_specs
+        from docling.datamodel.base_models import InputFormat
+        from docling.pipeline.asr_pipeline import AsrPipeline
+
+        # Use Path object - Docling expects this
+        audio_path = Path(file_path).resolve()
+        
+        # Verify file exists
+        if not audio_path.exists():
+            logger.error(f"Audio file not found: {audio_path}")
+            return f"[Error: Audio file not found: {os.path.basename(file_path)}]"
+        
+        # Get recommended Whisper model for current mode
+        recommended_model = ResourceMonitor.get_whisper_model_for_mode(
+            self.ingestion_mode
+        )
+        
+        # Fallback chain: Turbo → Base → Tiny
+        model_chain = [
+            ("WHISPER_TURBO", asr_model_specs.WHISPER_TURBO, "~3GB, best quality"),
+            ("WHISPER_BASE", asr_model_specs.WHISPER_BASE, "~300MB, good quality"),
+            ("WHISPER_TINY", asr_model_specs.WHISPER_TINY, "~75MB, basic quality"),
+        ]
+        
+        # Start with recommended model, or use full chain if none recommended
+        if recommended_model:
+            # Find index of recommended model
+            start_index = next(
+                (i for i, (name, _, _) in enumerate(model_chain) 
+                 if name == recommended_model),
+                0
             )
-            from docling.datamodel.pipeline_options import AsrPipelineOptions
-            from docling.datamodel import asr_model_specs
-            from docling.datamodel.base_models import InputFormat
-            from docling.pipeline.asr_pipeline import AsrPipeline
-
-            # Use Path object - Docling expects this
-            audio_path = Path(file_path).resolve()
-            logger.info(
-                f"Transcribing audio file using Whisper Turbo: {audio_path.name}"
+            models_to_try = model_chain[start_index:]
+        else:
+            logger.warning(
+                f"No Whisper model recommended for {self.ingestion_mode.value} mode"
             )
-            logger.info(f"Audio file absolute path: {audio_path}")
+            return f"[Skipped: Audio processing disabled in {self.ingestion_mode.value} mode]"
+        
+        # Try each model in the fallback chain
+        for model_name, model_spec, description in models_to_try:
+            try:
+                logger.info(
+                    f"Attempting transcription with {model_name} ({description}): "
+                    f"{audio_path.name}"
+                )
+                
+                # Configure ASR pipeline with current model
+                pipeline_options = AsrPipelineOptions()
+                pipeline_options.asr_options = model_spec
 
-            # Verify file exists
-            if not audio_path.exists():
-                raise FileNotFoundError(f"Audio file not found: {audio_path}")
+                converter = DocumentConverter(
+                    format_options={
+                        InputFormat.AUDIO: AudioFormatOption(
+                            pipeline_cls=AsrPipeline,
+                            pipeline_options=pipeline_options,
+                        )
+                    }
+                )
 
-            # Configure ASR pipeline with Whisper Turbo model
-            pipeline_options = AsrPipelineOptions()
-            pipeline_options.asr_options = asr_model_specs.WHISPER_TURBO
+                # Transcribe the audio file - pass Path object
+                result = converter.convert(audio_path)
 
-            converter = DocumentConverter(
-                format_options={
-                    InputFormat.AUDIO: AudioFormatOption(
-                        pipeline_cls=AsrPipeline,
-                        pipeline_options=pipeline_options,
-                    )
-                }
-            )
+                # Export to markdown with timestamps
+                markdown_content = result.document.export_to_markdown()
+                logger.info(
+                    f"✅ Successfully transcribed {os.path.basename(file_path)} "
+                    f"with {model_name}"
+                )
+                return markdown_content
 
-            # Transcribe the audio file - pass Path object
-            result = converter.convert(audio_path)
-
-            # Export to markdown with timestamps
-            markdown_content = result.document.export_to_markdown()
-            logger.info(
-                f"Successfully transcribed {os.path.basename(file_path)}"
-            )
-            return markdown_content
-
-        except Exception as e:
-            logger.error(
-                f"Failed to transcribe {file_path} with Whisper ASR: {e}"
-            )
-            return (
-                f"[Error: Could not transcribe audio file "
-                f"{os.path.basename(file_path)}]"
-            )
+            except Exception as e:
+                logger.warning(
+                    f"❌ Failed to transcribe with {model_name}: {e}"
+                )
+                # Try next model in chain
+                continue
+        
+        # All models failed
+        logger.error(
+            f"Failed to transcribe {file_path} with all available Whisper models"
+        )
+        return (
+            f"[Error: Could not transcribe audio file "
+            f"{os.path.basename(file_path)} - all Whisper models failed]"
+        )
 
     def _extract_title(self, content: str, file_path: str) -> str:
         """Extract title from document content or filename."""
@@ -558,6 +629,17 @@ async def main():
         choices=["semantic", "simple", "adaptive"], help="Chunker type"
     )
     parser.add_argument(
+        "--mode", type=str, default="auto",
+        choices=["auto", "full", "standard", "light", "minimal"],
+        help="Ingestion mode (auto=detect based on resources, "
+             "full=all features, standard=no enrichment, "
+             "light=tiny models, minimal=skip audio)"
+    )
+    parser.add_argument(
+        "--check-resources", action="store_true",
+        help="Check system resources and exit (dry run)"
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
 
@@ -569,6 +651,28 @@ async def main():
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    
+    # Import resource monitor here to avoid circular import
+    from .resource_monitor import ResourceMonitor, IngestionMode
+    
+    # Check resources and exit if requested
+    if args.check_resources:
+        ResourceMonitor.print_resource_summary()
+        return
+    
+    # Parse ingestion mode
+    ingestion_mode = None
+    auto_detect = False
+    if args.mode == "auto":
+        auto_detect = True
+    else:
+        mode_map = {
+            "full": IngestionMode.FULL,
+            "standard": IngestionMode.STANDARD,
+            "light": IngestionMode.LIGHT,
+            "minimal": IngestionMode.MINIMAL,
+        }
+        ingestion_mode = mode_map[args.mode]
 
     # Create ingestion configuration
     config = IngestionConfig(
@@ -579,11 +683,17 @@ async def main():
         chunker_type=args.chunker
     )
 
-    # Create and run pipeline
+    # Print resource summary before starting
+    if auto_detect or args.verbose:
+        ResourceMonitor.print_resource_summary()
+
+    # Create ingestion pipeline
     pipeline = DocumentIngestionPipeline(
         config=config,
         documents_folder=args.documents,
-        clean_before_ingest=not args.no_clean
+        clean_before_ingest=not args.no_clean,
+        ingestion_mode=ingestion_mode,
+        auto_detect_mode=auto_detect
     )
     
     def progress_callback(current: int, total: int):

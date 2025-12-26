@@ -43,3 +43,4 @@ opencv-python-headless>=4.7.0  # Image processing without GUI dependencies
 ffmpeg-python>=0.2.0      # Audio and video processing
 pydub>=0.25.1             # Audio processing
 librosa>=0.10.0           # Audio analysis
+psutil>=6.1.0             # System resource monitoring for adaptive ingestion
