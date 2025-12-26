@@ -1,8 +1,11 @@
 import asyncio
-import pytest
+import pytest  # type: ignore[import]
 from rag_agent_advanced import search_with_hybrid_retrieval_meta, search_with_self_reflection_meta
 
-def test_hybrid_meta_returns_structure(monkeypatch):
+import pytest  # type: ignore[import]
+
+@pytest.mark.asyncio
+async def test_hybrid_meta_returns_structure(monkeypatch):
     # Patch initialize_bm25 & embedding to avoid DB dependencies
     class DummyEmbedder:
         async def embed_query(self, q):
@@ -26,13 +29,14 @@ def test_hybrid_meta_returns_structure(monkeypatch):
     monkeypatch.setattr('rag_agent_advanced.bm25_index', type('X', (), {'get_scores': lambda self, q: [0]} )())
     monkeypatch.setattr('rag_agent_advanced.bm25_chunks', [])
 
-    res = asyncio.run(search_with_hybrid_retrieval_meta(None, 'test'))
+    res = await search_with_hybrid_retrieval_meta(None, 'test')
     assert isinstance(res, dict)
     assert 'formatted' in res and 'meta' in res
     assert 'dense_count' in res['meta'] and 'sparse_count' in res['meta']
 
 
-def test_self_reflection_meta_structure(monkeypatch):
+@pytest.mark.asyncio
+async def test_self_reflection_meta_structure(monkeypatch):
     # Monkeypatch DB to return a fake result
     class DummyConn:
         async def fetch(self, *args, **kwargs):
@@ -63,7 +67,7 @@ def test_self_reflection_meta_structure(monkeypatch):
                     return DummyResp('5')
     monkeypatch.setattr('rag_agent_advanced.AsyncOpenAI', lambda *a, **k: DummyClient())
 
-    res = asyncio.run(search_with_self_reflection_meta(None, 'test'))
+    res = await search_with_self_reflection_meta(None, 'test')
     assert isinstance(res, dict)
     assert 'formatted' in res and 'meta' in res
     assert 'returned' in res['meta']

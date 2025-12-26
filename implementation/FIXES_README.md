@@ -155,6 +155,8 @@ st.selectbox("Chunking", ["semantic", "fixed", "adaptive"], index=0, key=f"chunk
 
 **Update:** We added exact token usage reporting (where provided by the API) to metadata, and removed redundant "Answer:" labels from generated outputs to make UI rendering cleaner and more readable.
 
+**Developer Note:** We added `pytest-asyncio` to the project's dev optional dependencies and migrated tests to async style (using `@pytest.mark.asyncio`) to make test code clearer and avoid runtime wrappers; tests still pass locally in the project's venv. Also added `# type: ignore[import]` markers for optional third-party packages to reduce noise in type checkers in developer environments.
+
 ## 📊 By The Numbers
 
 ### Code Changes
