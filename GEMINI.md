@@ -79,6 +79,23 @@ uv run python rag_agent.py
 uv run python rag_agent_advanced.py
 ```
 
+### 5. Testing
+Run the test suite to validate the ingestion pipeline:
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio
+
+# Run LoRA-SHIFT ingestion tests (17 tests)
+pytest test_lora_shift_ingestion.py -v
+
+# Expected: All tests pass, validating:
+# - Paper structure and content
+# - Chunking logic
+# - Embedding generation
+# - Retrieval queries
+# - Error handling
+```
+
 ## Development Conventions
 
 *   **Async/Await:** The codebase relies heavily on Python's `asyncio`. Ensure all database and API calls are awaited properly.
@@ -106,3 +123,6 @@ When asked to modify or explain specific strategies, refer to these definitions:
     3.  Implement the logic in `implementation/rag_agent_advanced.py` (or a new module if complex).
 *   **Debugging Ingestion:** Check `ingestion/ingest.py` and `ingestion/chunker.py`. Docling integration is central here.
 *   **Modifying Database Schema:** Update `sql/schema.sql`. Note that schema changes may require clearing existing data.
+*   **Testing Changes:** Run `pytest test_lora_shift_ingestion.py -v` to validate ingestion pipeline.
+*   **Troubleshooting:** Refer to `TROUBLESHOOTING.md` for common issues and solutions.
+*   **Learning RAG:** Follow the structured path in `STUDENT_GUIDE.md` (9-week curriculum).

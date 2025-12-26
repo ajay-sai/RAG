@@ -2,12 +2,14 @@
 
 **A comprehensive resource for understanding and implementing advanced Retrieval-Augmented Generation strategies.**
 
-This repository demonstrates 11 RAG strategies with:
+This repository demonstrates 16 RAG strategies with:
 - 📖 Detailed theory and research ([docs/](docs/))
 - 💻 Simple pseudocode examples ([examples/](examples/))
 - 🔧 Full code examples ([implementation/](implementation/))
+- 🎓 **Student learning guide** ([STUDENT_GUIDE.md](STUDENT_GUIDE.md))
+- 🔧 **Troubleshooting guide** ([TROUBLESHOOTING.md](TROUBLESHOOTING.md))
 
-Perfect for: AI engineers, ML practitioners, and anyone building RAG systems.
+Perfect for: AI engineers, ML practitioners, data science students, and anyone building RAG systems.
 
 ---
 
@@ -15,12 +17,13 @@ Perfect for: AI engineers, ML practitioners, and anyone building RAG systems.
 
 1. [Strategy Overview](#-strategy-overview)
 2. [Quick Start](#-quick-start)
-3. [Pseudocode Examples](#-pseudocode-examples)
-4. [Code Examples](#-code-examples)
-5. [Detailed Strategy Guide](#-detailed-strategy-guide)
-6. [Repository Structure](#-repository-structure)
-
-New: Added five more advanced techniques (12-16). See `docs/12-hybrid-retrieval.md` through `docs/16-adaptive-chunking.md` and matching examples in `examples/`.
+3. [For Students & Learners](#-for-students--learners) ⭐ NEW
+4. [Pseudocode Examples](#-pseudocode-examples)
+5. [Code Examples](#-code-examples)
+6. [Detailed Strategy Guide](#-detailed-strategy-guide)
+7. [Repository Structure](#-repository-structure)
+8. [Testing](#-testing) ⭐ NEW
+9. [Troubleshooting](#-troubleshooting) ⭐ NEW
 
 ---
 
@@ -81,6 +84,46 @@ python -m ingestion.ingest --documents ./documents --chunker adaptive
 # Run the advanced agent
 python rag_agent_advanced.py
 ```
+
+---
+
+## 🎓 For Students & Learners
+
+**New to RAG? Start here!**
+
+This repository includes comprehensive learning resources:
+
+### 📖 Student Guide
+**[STUDENT_GUIDE.md](STUDENT_GUIDE.md)** - Your complete learning path:
+- Structured 9-week curriculum from beginner to advanced
+- Core concepts explained with examples
+- Practical exercises and project ideas
+- Common pitfalls and how to avoid them
+- Production deployment considerations
+
+**Quick learning path:**
+```
+Week 1-2:  Basics (chunking, embeddings, vector search)
+Week 3-4:  Query enhancement (expansion, multi-query)
+Week 5-6:  Advanced retrieval (hybrid, reranking, self-reflective)
+Week 7-8:  Generation enhancement (fact verification, multi-hop)
+Week 9+:   Specialized topics (knowledge graphs, fine-tuning)
+```
+
+### 🔧 Troubleshooting Guide
+**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions to common issues:
+- Setup problems (dependencies, database, API keys)
+- Ingestion errors (file processing, embeddings, memory)
+- Retrieval issues (no results, low relevance, slow queries)
+- Agent problems (hallucinations, tool calling)
+- Testing and debugging
+
+### 📝 Test Paper
+**[LoRA-SHIFT Research Paper](implementation/documents/LoRA-SHIFT-Final-Research-Paper.md)** - A comprehensive test document:
+- 19,000+ characters of technical content
+- Structured research paper format
+- Perfect for testing RAG strategies
+- Includes abstract, methodology, results, and appendices
 
 ---
 
@@ -850,6 +893,101 @@ all-rag-strategies/
 - **Anthropic's Contextual Retrieval**: https://www.anthropic.com/news/contextual-retrieval
 - **Graphiti (Knowledge Graphs)**: https://github.com/getzep/graphiti
 - **Pydantic AI Docs**: https://ai.pydantic.dev/
+
+---
+
+## 🧪 Testing
+
+### Automated Tests
+
+The repository includes comprehensive test suites:
+
+**LoRA-SHIFT Paper Ingestion Tests:**
+```bash
+cd implementation
+pytest test_lora_shift_ingestion.py -v
+```
+
+**Test Coverage:**
+- ✅ Paper structure validation (17 tests)
+- ✅ Chunking logic verification
+- ✅ Embedding dimension checks
+- ✅ Retrieval query validation
+- ✅ Error handling scenarios
+- ✅ Metadata extraction
+
+**Run all tests:**
+```bash
+pytest -v --tb=short
+```
+
+### Manual Testing
+
+**Test ingestion pipeline:**
+```bash
+# Ingest test paper
+cd implementation
+python -m ingestion.ingest --documents documents/LoRA-SHIFT-Final-Research-Paper.md
+
+# Expected output:
+# ✓ Processed 1 document
+# ✓ Created ~30-50 chunks
+# ✓ Generated embeddings
+# ✓ Stored in database
+```
+
+**Test retrieval with sample queries:**
+```bash
+python rag_agent_advanced.py
+
+# Try these queries:
+# - "What is LoRA-SHIFT?"
+# - "How does LoRA-SHIFT improve over standard LoRA?"
+# - "What datasets were used in LoRA-SHIFT experiments?"
+# - "What is the computational overhead of LoRA-SHIFT?"
+```
+
+---
+
+## 🐛 Troubleshooting
+
+**Quick fixes for common issues:**
+
+### Setup Issues
+```bash
+# No module found
+pip install -r implementation/requirements-advanced.txt
+
+# Database connection failed
+# Check DATABASE_URL in .env
+
+# pgvector extension not found
+sudo apt-get install postgresql-16-pgvector
+psql $DATABASE_URL -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+### Ingestion Issues
+```bash
+# Documents not processing
+# - Check file format (PDF, DOCX, MD, TXT supported)
+# - Verify files exist in documents/ folder
+# - Check file permissions
+
+# Out of memory
+# - Process files one at a time
+# - Use smaller chunk sizes
+# - Reduce batch size
+```
+
+### Retrieval Issues
+```bash
+# No results returned
+# - Verify data exists: SELECT COUNT(*) FROM chunks;
+# - Check embeddings: SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL;
+# - Rebuild index: python -m ingestion.ingest --documents ./documents
+```
+
+**For detailed solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
 
 ---
 
