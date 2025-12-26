@@ -101,7 +101,7 @@ xcode-select --install
 
 ## 🚀 Quick Start
 
-### View Pseudocode Examples
+### 1. View Pseudocode Examples (No Setup Required)
 
 ```bash
 cd examples
@@ -109,9 +109,9 @@ cd examples
 cat 01_reranking.py
 ```
 
-### Run the Code Examples (Educational)
+### 2. Interactive Strategy Lab (Recommended)
 
-> **Note**: These are educational examples to show how strategies work in real code. Not guaranteed to be fully functional or production-ready.
+**Try strategies side-by-side with a web UI!**
 
 ```bash
 cd implementation
@@ -123,7 +123,41 @@ pip install -r requirements-advanced.txt
 cp .env.example .env
 # Edit .env: Add DATABASE_URL and OPENAI_API_KEY
 
-# Ingest documents (with adaptive chunking)
+# Initialize database
+psql $DATABASE_URL < sql/schema.sql
+
+# Ingest sample documents
+python -m ingestion.ingest --documents ./documents
+
+# Launch Streamlit app
+streamlit run app.py
+```
+
+The app opens at **http://localhost:8501**
+
+**Features:**
+- 🧪 **Strategy Lab**: Compare up to 3 strategies side-by-side
+- 📊 **Visual Metrics**: See latency, tokens, and costs for each approach
+- 📁 **File Upload**: Test with your own documents
+- 💡 **Educational**: Tooltips explain each strategy's trade-offs
+
+**Quick guide:** [docs/implementation/QUICK_START.md](docs/implementation/QUICK_START.md)
+
+### 3. CLI Agent (Command Line)
+
+> **Note**: These are educational examples to show how strategies work in real code. Not guaranteed to be fully functional or production-ready.
+
+```bash
+cd implementation
+
+# Install dependencies (if not done above)
+pip install -r requirements-advanced.txt
+
+# Setup environment
+cp .env.example .env
+# Edit .env: Add DATABASE_URL and OPENAI_API_KEY
+
+# Ingest documents
 python -m ingestion.ingest --documents ./documents --chunker adaptive
 
 # Run the advanced agent
