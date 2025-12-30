@@ -60,7 +60,7 @@ if schemas:
         # Optional: Display some data from the table
         st.subheader(f"Sample Data from: {selected_table}")
         try:
-            sample_data_query = f"SELECT * FROM {selected_schema}.{selected_table} LIMIT 10;"
+            sample_data_query = f'SELECT * FROM "{selected_schema}"."{selected_table}" LIMIT 10;'
             sample_data_df = conn.query(sample_data_query, ttl="10m")
             st.dataframe(sample_data_df, use_container_width=True)
         except Exception as e:
