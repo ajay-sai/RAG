@@ -34,7 +34,7 @@ def get_table_schema(schema_name, table_name):
 # Function to get row count for a selected table
 @st.cache_data(ttl="10m")
 def get_row_count(schema_name, table_name):
-    query = f"SELECT count(*) FROM {schema_name}.{table_name};"
+    query = f'SELECT count(*) FROM "{schema_name}"."{table_name}";'
     df_count = conn.query(query)
     return df_count.iloc[0, 0]
 
