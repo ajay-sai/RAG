@@ -27,8 +27,8 @@ def get_tables(schema_name):
 @st.cache_data(ttl="10m")
 def get_table_schema(schema_name, table_name):
     # Query information_schema.columns to get column details (name and data type)
-    query = f"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name = '{table_name}';"
-    df_columns = conn.query(query)
+    query = "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = :schema_name AND table_name = :table_name;"
+    df_columns = conn.query(query, params={"schema_name": schema_name, "table_name": table_name})
     return df_columns
 
 # Function to get row count for a selected table
