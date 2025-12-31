@@ -8,7 +8,8 @@ This repository demonstrates 16 RAG strategies with:
 - 🔧 Full code examples ([implementation/](implementation/))
 - 🎓 **Student learning guide** ([docs/guides/STUDENT_GUIDE.md](docs/guides/STUDENT_GUIDE.md))
 - 🔧 **Troubleshooting guide** ([docs/guides/TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md))
-- 📝 **Medium-style article** ([MEDIUM_ARTICLE.md](MEDIUM_ARTICLE.md)) - A complete guide with insights & learnings ⭐ NEW
+- 📝 **Medium-style article** ([MEDIUM_ARTICLE.md](MEDIUM_ARTICLE.md)) - Complete guide with insights & learnings ⭐ NEW
+- 📊 **Interactive diagrams** ([DIAGRAMS.md](DIAGRAMS.md)) - Mermaid visualizations of all strategies ⭐ NEW
 
 Perfect for: AI engineers, ML practitioners, data science students, and anyone building RAG systems.
 
