@@ -22,7 +22,7 @@ def get_tables(schema_name):
     df_tables = conn.query(query, params={"schema_name": schema_name})
     return df_tables['table_name'].tolist()
 
-# Function to get columns (schema) for a selected table
+# Function to get column information for a selected table
 @st.cache_data(ttl="10m")
 def get_table_schema(schema_name, table_name):
     # Query information_schema.columns to get column details (name and data type)
