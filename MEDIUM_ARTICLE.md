@@ -24,6 +24,8 @@ This article walks through a production-ready RAG implementation that addresses 
 
 **Repository**: [ajay-sai/RAG](https://github.com/ajay-sai/RAG)
 
+**📊 Visual Diagrams**: All architecture and strategy diagrams are available with interactive Mermaid visualization in [DIAGRAMS.md](DIAGRAMS.md)
+
 ---
 
 ## Table of Contents
