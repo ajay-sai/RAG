@@ -77,7 +77,7 @@ def _score_from_text(text: str, default: float = 0.5) -> float:
     numbers = re.findall(r'\b(\d+(?:\.\d+)?)\b', text)
     if numbers:
         v = float(numbers[0])
-        # Normalise 0-10 scale to 0-1
+        # Normalize 0-10 scale to 0-1
         if v > 1.0:
             v = v / 10.0
         return _clamp(v)
@@ -326,7 +326,7 @@ class RAGEvaluator:
             return {"score": 0.0, "label": f"NDCG@{k}", "detail": "No scores"}
 
         rel = relevance_scores[:k]
-        # Normalise to 0-1 range if values > 1
+        # Normalize to 0-1 range if values > 1
         if max(rel) > 1:
             rel = [r / 10.0 for r in rel]
 
@@ -570,10 +570,10 @@ class RAGEvaluator:
         if not total_tokens or total_tokens <= 0:
             return {"score": None, "label": "Token Efficiency", "detail": "Token count unavailable"}
         efficiency = (word_count / total_tokens) * 100
-        # Normalise roughly: 15-30 words per 100 tokens is typical
-        normalised = _clamp(efficiency / 30.0)
+        # Normalize roughly: 15-30 words per 100 tokens is typical
+        normalized = _clamp(efficiency / 30.0)
         return {
-            "score": normalised,
+            "score": normalized,
             "raw_efficiency": efficiency,
             "word_count": word_count,
             "total_tokens": total_tokens,

@@ -67,7 +67,7 @@ class TestHelpers:
         assert _score_from_text("no number here", default=0.3) == 0.3
 
     def test_score_from_text_scale_ten(self):
-        # "7/10" → extracts 7 → normalises to 0.7
+        # "7/10" → extracts 7 → normalizes to 0.7
         assert abs(_score_from_text("7") - 0.7) < 1e-6
 
 
