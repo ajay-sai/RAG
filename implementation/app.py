@@ -42,7 +42,14 @@ except Exception:
     st.run = lambda *a, **k: None
     st.radio = lambda *a, **k: a[1][0] if len(a) > 1 and a[1] else None
     st.code = lambda *a, **k: None
+    st.number_input = lambda *a, **k: k.get('value', 0)
+    st.tabs = lambda labels: [_DummyCtx() for _ in labels]
+    st.metric = lambda *a, **k: None
+    st.json = lambda *a, **k: None
+    st.dataframe = lambda *a, **k: None
+    st.plotly_chart = lambda *a, **k: None
 import asyncio
+import logging
 import time
 import os
 import sys
@@ -50,6 +57,8 @@ import re
 import html
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 # Add implementation directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -145,6 +154,13 @@ try:
 except ImportError as e:
     IMPORTS_SUCCESSFUL = False
     IMPORT_ERROR = str(e)
+
+# Evaluation module (always available – pure Python, no DB needed at import)
+try:
+    from utils.evaluation import RAGEvaluator, extract_contexts_from_formatted
+    EVAL_AVAILABLE = True
+except ImportError:
+    EVAL_AVAILABLE = False
 
 # Page config
 st.set_page_config(
@@ -297,6 +313,57 @@ theme_css = f"""
     .stButton > button:hover {{
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }}
+
+    /* Evaluation scorecard styling */
+    .eval-scorecard {{
+        background-color: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 16px;
+        margin-top: 12px;
+        box-shadow: var(--shadow);
+    }}
+
+    .eval-metric-row {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--card-border);
+    }}
+
+    .eval-metric-row:last-child {{
+        border-bottom: none;
+    }}
+
+    .eval-metric-name {{
+        font-size: 0.88em;
+        color: var(--metric-text);
+        font-weight: 500;
+    }}
+
+    .eval-score-pill {{
+        padding: 3px 12px;
+        border-radius: 12px;
+        font-size: 0.85em;
+        font-weight: 700;
+        color: #fff;
+    }}
+
+    .eval-score-high   {{ background: #43a047; }}
+    .eval-score-med    {{ background: #fb8c00; }}
+    .eval-score-low    {{ background: #e53935; }}
+    .eval-score-na     {{ background: #9e9e9e; }}
+
+    .eval-overall-badge {{
+        font-size: 1.4em;
+        font-weight: 800;
+        padding: 8px 20px;
+        border-radius: 20px;
+        color: #fff;
+        display: inline-block;
+        margin-top: 10px;
     }}
 </style>
 """
@@ -459,7 +526,117 @@ Provide a clear, well-structured answer based solely on the information in the c
         logger.error(f"Answer generation failed: {e}", exc_info=True)
         return f"Error generating answer: {str(e)}"
 
+
+# ---------------------------------------------------------------------------
+# Evaluation helpers
+# ---------------------------------------------------------------------------
+
+def _score_color_class(score: Optional[float]) -> str:
+    """Return CSS class for a 0-1 score."""
+    if score is None:
+        return "eval-score-na"
+    if score >= 0.70:
+        return "eval-score-high"
+    if score >= 0.40:
+        return "eval-score-med"
+    return "eval-score-low"
+
+
+def _score_label(score: Optional[float]) -> str:
+    """Return formatted label for a 0-1 score."""
+    if score is None:
+        return "N/A"
+    return f"{score:.0%}"
+
+
+def _render_eval_scorecard(eval_report: Dict[str, Any], title: str = "🔬 Evaluation Metrics") -> None:
+    """Render evaluation metrics as an HTML scorecard inside an st.expander."""
+    DISPLAY_METRICS = [
+        ("overall_score",        "⭐ Overall RAG Score"),
+        ("faithfulness",         "✅ Faithfulness"),
+        ("answer_relevance",     "🎯 Answer Relevance"),
+        ("context_precision",    "📌 Context Precision"),
+        ("context_recall",       "🔁 Context Recall"),
+        ("groundedness",         "🏗️ Groundedness"),
+        ("coherence",            "📖 Coherence"),
+        ("conciseness",          "✂️ Conciseness"),
+        ("avg_similarity",       "🔍 Avg Retrieval Similarity"),
+        ("ndcg",                 "📊 NDCG@5"),
+        ("token_efficiency",     "⚡ Token Efficiency"),
+        ("answer_correctness",   "🏆 Answer Correctness"),
+    ]
+
+    rows_html = ""
+    for key, display_name in DISPLAY_METRICS:
+        if key == "overall_score":
+            raw_score = eval_report.get("overall_score")
+            score_html = (
+                f'<span class="eval-score-pill {_score_color_class(raw_score)}">'
+                f'{_score_label(raw_score)}</span>'
+            )
+            rows_html += (
+                f'<div class="eval-metric-row" style="font-weight:700">'
+                f'<span class="eval-metric-name">{display_name}</span>'
+                f'{score_html}</div>'
+            )
+            continue
+
+        metric = eval_report.get(key)
+        if metric is None:
+            continue
+
+        score = metric.get("score")
+        detail = metric.get("detail", "")
+
+        score_html = (
+            f'<span class="eval-score-pill {_score_color_class(score)}">'
+            f'{_score_label(score)}</span>'
+        )
+        detail_html = f'<span style="font-size:0.78em;opacity:0.7;margin-left:6px">{html.escape(str(detail)[:80])}</span>' if detail else ""
+
+        rows_html += (
+            f'<div class="eval-metric-row">'
+            f'<span class="eval-metric-name">{display_name}{detail_html}</span>'
+            f'{score_html}</div>'
+        )
+
+    html_block = f'<div class="eval-scorecard">{rows_html}</div>'
+
+    with st.expander(title, expanded=False):
+        st.markdown(html_block, unsafe_allow_html=True)
+
+
+async def _run_evaluation(
+    question: str,
+    answer: str,
+    contexts: List[str],
+    reference_answer: Optional[str] = None,
+    similarity_scores: Optional[List[float]] = None,
+    total_tokens: Optional[int] = None,
+    include_groundedness: bool = True,
+    include_coherence: bool = True,
+    include_conciseness: bool = True,
+) -> Dict[str, Any]:
+    """Run full evaluation using the RAGEvaluator."""
+    evaluator = RAGEvaluator(
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4o-mini",
+    )
+    return await evaluator.run_full_evaluation(
+        question=question,
+        answer=answer,
+        contexts=contexts,
+        reference_answer=reference_answer,
+        similarity_scores=similarity_scores,
+        total_tokens=total_tokens,
+        include_groundedness=include_groundedness,
+        include_coherence=include_coherence,
+        include_conciseness=include_conciseness,
+    )
+
+
 # --- Page: Learning Center ---
+
 
 def render_learning_page():
     st.header("📚 Strategies")
@@ -930,10 +1107,466 @@ def render_retrieval_page():
                                 st.subheader("Metadata")
                                 st.code(json.dumps(meta, indent=2))
 
+                            # Inline evaluation scorecard
+                            if EVAL_AVAILABLE and res.get('output'):
+                                eval_key = f"eval_result_{i}"
+                                if eval_key in st.session_state:
+                                    _render_eval_scorecard(
+                                        st.session_state[eval_key],
+                                        title="🔬 Evaluation Metrics (cached)"
+                                    )
                         else:
                             st.error(f"Error: {res.get('error')}")
 
+            # Evaluate Results button (shows after comparison)
+            if EVAL_AVAILABLE:
+                st.markdown("---")
+                ref_answer = st.text_area(
+                    "📝 Optional: Reference / Ground-Truth Answer (for Answer Correctness metric)",
+                    key="ref_answer_strategy_lab",
+                    height=60,
+                    placeholder="Leave blank to skip Answer Correctness evaluation",
+                    help="If you provide a reference answer, the evaluation will also compute Answer Correctness metric."
+                )
+                if st.button("🔬 Evaluate All Strategies", type="secondary", use_container_width=True,
+                             key="eval_all_btn",
+                             help="Run evaluation metrics (Faithfulness, Answer Relevance, etc.) on the results above"):
+                    if 'results' not in dir():
+                        st.warning("Please run a comparison first.")
+                    else:
+                        async def run_evals(results_data):
+                            eval_tasks = []
+                            for res in results_data:
+                                if res.get("status") == "Success" and res.get("output"):
+                                    ctxs = extract_contexts_from_formatted(res.get("raw_chunks", ""))
+                                    tokens = res.get("meta", {}).get("total_tokens") if isinstance(res.get("meta"), dict) else None
+                                    eval_tasks.append(_run_evaluation(
+                                        question=user_query,
+                                        answer=res["output"],
+                                        contexts=ctxs,
+                                        reference_answer=ref_answer if ref_answer else None,
+                                        total_tokens=tokens,
+                                    ))
+                                else:
+                                    async def _empty():
+                                        return {}
+                                    eval_tasks.append(_empty())
+                            return await asyncio.gather(*eval_tasks, return_exceptions=True)
+
+                        with st.spinner("🔬 Running evaluation metrics (this may take 15-30 seconds)..."):
+                            try:
+                                import asyncio as _asyncio
+                                eval_reports = _asyncio.run(run_evals(results))
+                                e_cols = st.columns(3)
+                                for idx, (res, report) in enumerate(zip(results, eval_reports)):
+                                    with e_cols[idx]:
+                                        if isinstance(report, dict) and report:
+                                            st.session_state[f"eval_result_{idx}"] = report
+                                            _render_eval_scorecard(report, title=f"🔬 {res.get('name', f'Strategy {idx+1}')} Metrics")
+                            except Exception as exc:
+                                st.error(f"Evaluation error: {exc}")
+
+
+# --- Page: Evaluation Lab ---
+
+def render_evaluation_page():
+    """Full dedicated Evaluation Lab for systematic RAG evaluation."""
+    if not EVAL_AVAILABLE:
+        st.error("❌ Evaluation module not available. Check `utils/evaluation.py`.")
+        return
+
+    if not IMPORTS_SUCCESSFUL:
+        st.error("❌ Cannot load RAG modules. Please ensure all dependencies are installed.")
+        st.code("pip install -r requirements-advanced.txt", language="bash")
+        return
+
+    st.header("🔬 Evaluation Lab")
+    st.markdown("""
+    Systematically evaluate your RAG pipeline with industry-standard metrics.
+
+    **Metric categories:**
+    - 🎯 **Retrieval Quality** — Context Precision, Context Recall, Average Similarity, NDCG
+    - ✅ **Generation Quality** — Faithfulness, Answer Relevance, Groundedness, Hallucination Rate
+    - 📖 **Answer Quality** — Coherence, Conciseness, Answer Correctness (optional)
+    - ⚡ **Efficiency** — Token Efficiency, Latency
+
+    *LLM-as-Judge metrics use GPT-4o-mini. Ensure `OPENAI_API_KEY` is set.*
+    """)
+
+    st.info(
+        "💡 **Tip:** Use the Strategy Lab first to get answers, then come here to evaluate them. "
+        "Or enter answers manually below for batch evaluation.",
+        icon="💡"
+    )
+
+    tab_single, tab_batch, tab_compare = st.tabs(["Single Evaluation", "Batch Evaluation", "Strategy Comparison"])
+
+    # --- Single Evaluation Tab ---
+    with tab_single:
+        st.subheader("Single Query Evaluation")
+        st.caption("Evaluate one question–answer pair with full metric breakdown")
+
+        with st.container(border=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                eval_question = st.text_area(
+                    "❓ Question",
+                    key="eval_q_single",
+                    height=80,
+                    placeholder="What is RAG and why is it useful?",
+                )
+                eval_answer = st.text_area(
+                    "🤖 Generated Answer",
+                    key="eval_a_single",
+                    height=120,
+                    placeholder="Paste the generated answer here...",
+                )
+                eval_context = st.text_area(
+                    "📄 Retrieved Context (paste full context or chunk text)",
+                    key="eval_ctx_single",
+                    height=120,
+                    placeholder="Paste retrieved context chunks here (one per line or all together)...",
+                )
+            with col2:
+                eval_reference = st.text_area(
+                    "✅ Reference Answer (optional — for Correctness metric)",
+                    key="eval_ref_single",
+                    height=80,
+                    placeholder="Leave blank to skip Answer Correctness evaluation",
+                )
+                eval_sim_scores = st.text_input(
+                    "📐 Retrieval Similarity Scores (optional, comma-separated 0-1 values)",
+                    key="eval_sim_single",
+                    placeholder="e.g. 0.92, 0.87, 0.81, 0.76, 0.71",
+                    help="Cosine similarity scores from the DB query — used for NDCG and Avg Similarity."
+                )
+
+                st.markdown("**⚙️ Metric Options**")
+                inc_groundedness = st.checkbox("Groundedness / Hallucination Rate", value=True, key="inc_ground_single")
+                inc_coherence = st.checkbox("Coherence", value=True, key="inc_coh_single")
+                inc_conciseness = st.checkbox("Conciseness", value=True, key="inc_conc_single")
+
+        if st.button("🚀 Run Evaluation", type="primary", key="run_eval_single"):
+            if not eval_question or not eval_answer:
+                st.warning("Please provide at least a Question and a Generated Answer.")
+            else:
+                contexts = [c.strip() for c in eval_context.split("\n\n") if c.strip()] if eval_context else []
+                if not contexts and eval_context:
+                    contexts = [eval_context.strip()]
+
+                sim_scores = None
+                if eval_sim_scores:
+                    try:
+                        sim_scores = [float(s.strip()) for s in eval_sim_scores.split(",") if s.strip()]
+                    except ValueError:
+                        st.warning("Could not parse similarity scores — ignoring.")
+
+                with st.spinner("🔬 Running evaluation metrics (15-30 seconds)..."):
+                    try:
+                        report = asyncio.run(_run_evaluation(
+                            question=eval_question,
+                            answer=eval_answer,
+                            contexts=contexts,
+                            reference_answer=eval_reference if eval_reference else None,
+                            similarity_scores=sim_scores,
+                            include_groundedness=inc_groundedness,
+                            include_coherence=inc_coherence,
+                            include_conciseness=inc_conciseness,
+                        ))
+                        st.session_state["last_single_eval"] = report
+
+                        # Overall score banner
+                        overall = report.get("overall_score")
+                        if overall is not None:
+                            color = "#43a047" if overall >= 0.70 else ("#fb8c00" if overall >= 0.40 else "#e53935")
+                            st.markdown(
+                                f'<div style="text-align:center;margin:12px 0">'
+                                f'<span class="eval-overall-badge" style="background:{color}">'
+                                f'Overall RAG Score: {overall:.0%}</span></div>',
+                                unsafe_allow_html=True
+                            )
+
+                        # Metric grid
+                        _render_eval_scorecard(report, title="📊 Full Metric Breakdown")
+
+                        # Expanded details
+                        with st.expander("🔎 Raw Evaluation Data (JSON)"):
+                            import json
+                            st.code(json.dumps(report, indent=2, default=str))
+
+                    except Exception as exc:
+                        st.error(f"Evaluation failed: {exc}")
+                        import traceback
+                        with st.expander("Error details"):
+                            st.code(traceback.format_exc())
+
+    # --- Batch Evaluation Tab ---
+    with tab_batch:
+        st.subheader("Batch Evaluation")
+        st.caption("Evaluate multiple question-answer pairs and compare aggregate metrics")
+
+        st.markdown("""
+        Enter one pair per row in the table below. Use `|` to separate columns:
+        `Question | Answer | Context (optional) | Reference Answer (optional)`
+        """)
+
+        default_batch = (
+            "What is RAG? | RAG stands for Retrieval-Augmented Generation... | RAG combines retrieval with generation... | \n"
+            "How does vector search work? | Vector search finds semantically similar content... | Embeddings represent text as vectors... | "
+        )
+        batch_input = st.text_area(
+            "📋 Batch Input (Question | Answer | Context | Reference)",
+            value=default_batch,
+            height=200,
+            key="batch_eval_input",
+        )
+
+        eval_model = st.selectbox(
+            "LLM Judge Model",
+            ["gpt-4o-mini", "gpt-4o"],
+            key="batch_eval_model",
+            help="gpt-4o-mini is faster/cheaper; gpt-4o gives higher quality evaluations"
+        )
+
+        if st.button("🚀 Run Batch Evaluation", type="primary", key="run_eval_batch"):
+            rows = [r.strip() for r in batch_input.strip().split("\n") if r.strip()]
+            if not rows:
+                st.warning("Please enter at least one row.")
+            else:
+                parsed = []
+                errors = []
+                for idx, row in enumerate(rows):
+                    parts = [p.strip() for p in row.split("|")]
+                    if len(parts) < 2:
+                        errors.append(f"Row {idx+1}: need at least Question|Answer")
+                        continue
+                    parsed.append({
+                        "question": parts[0],
+                        "answer": parts[1],
+                        "context": parts[2] if len(parts) > 2 else "",
+                        "reference": parts[3] if len(parts) > 3 else "",
+                    })
+
+                if errors:
+                    for err in errors:
+                        st.warning(err)
+
+                if parsed:
+                    async def run_batch(items):
+                        evaluator = RAGEvaluator(
+                            openai_api_key=os.getenv("OPENAI_API_KEY"),
+                            model=eval_model,
+                        )
+                        tasks = []
+                        for item in items:
+                            ctxs = [item["context"]] if item["context"] else []
+                            tasks.append(evaluator.run_full_evaluation(
+                                question=item["question"],
+                                answer=item["answer"],
+                                contexts=ctxs,
+                                reference_answer=item["reference"] if item["reference"] else None,
+                                include_groundedness=True,
+                                include_coherence=True,
+                                include_conciseness=True,
+                            ))
+                        return await asyncio.gather(*tasks, return_exceptions=True)
+
+                    with st.spinner(f"🔬 Evaluating {len(parsed)} items..."):
+                        try:
+                            reports = asyncio.run(run_batch(parsed))
+
+                            # Summary table
+                            METRIC_KEYS = [
+                                "faithfulness", "answer_relevance", "context_precision",
+                                "context_recall", "groundedness", "coherence", "conciseness",
+                            ]
+                            table_rows = []
+                            for item, report in zip(parsed, reports):
+                                if isinstance(report, Exception):
+                                    row = {"Question": item["question"][:50], "Error": str(report)}
+                                else:
+                                    row = {"Question": item["question"][:50]}
+                                    for mk in METRIC_KEYS:
+                                        m = report.get(mk, {})
+                                        s = m.get("score") if isinstance(m, dict) else None
+                                        row[mk.replace("_", " ").title()] = f"{s:.0%}" if s is not None else "N/A"
+                                    row["Overall"] = f"{report.get('overall_score', 0):.0%}" if report.get('overall_score') else "N/A"
+                                table_rows.append(row)
+
+                            try:
+                                import pandas as pd
+                                df = pd.DataFrame(table_rows)
+                                st.dataframe(df, use_container_width=True)
+                            except ImportError:
+                                st.json(table_rows)
+
+                            # Aggregate averages
+                            st.markdown("**📈 Aggregate Averages**")
+                            agg_cols = st.columns(len(METRIC_KEYS) + 1)
+                            for col_widget, mk in zip(agg_cols, METRIC_KEYS):
+                                scores = []
+                                for report in reports:
+                                    if isinstance(report, dict):
+                                        m = report.get(mk, {})
+                                        s = m.get("score") if isinstance(m, dict) else None
+                                        if s is not None:
+                                            scores.append(s)
+                                avg = sum(scores) / len(scores) if scores else None
+                                with col_widget:
+                                    st.metric(
+                                        label=mk.replace("_", " ").title(),
+                                        value=f"{avg:.0%}" if avg is not None else "N/A"
+                                    )
+
+                            overall_scores = [
+                                r.get("overall_score") for r in reports
+                                if isinstance(r, dict) and r.get("overall_score") is not None
+                            ]
+                            avg_overall = sum(overall_scores) / len(overall_scores) if overall_scores else None
+                            with agg_cols[-1]:
+                                st.metric(
+                                    label="Overall",
+                                    value=f"{avg_overall:.0%}" if avg_overall is not None else "N/A"
+                                )
+
+                            st.session_state["last_batch_reports"] = list(zip(parsed, reports))
+
+                        except Exception as exc:
+                            st.error(f"Batch evaluation failed: {exc}")
+                            import traceback
+                            with st.expander("Error details"):
+                                st.code(traceback.format_exc())
+
+    # --- Strategy Comparison Tab ---
+    with tab_compare:
+        st.subheader("Strategy Evaluation Comparison")
+        st.caption("Compare evaluation scores across different RAG strategy configurations")
+
+        st.markdown("""
+        Run a **Strategy Lab** comparison first, then click **Evaluate All Strategies** there.
+        Cached results from your last evaluation will appear here for detailed comparison.
+        """)
+
+        # Check if we have cached strategy eval results
+        cached_evals = {
+            k: v for k, v in st.session_state.items()
+            if k.startswith("eval_result_") and isinstance(v, dict)
+        }
+
+        if not cached_evals:
+            st.info("No cached evaluation results found. Run a comparison in the **Strategy Lab** and click **🔬 Evaluate All Strategies**.")
+        else:
+            st.success(f"✅ Found {len(cached_evals)} cached strategy evaluation(s).")
+
+            DISPLAY_KEYS = [
+                ("faithfulness",       "Faithfulness"),
+                ("answer_relevance",   "Answer Relevance"),
+                ("context_precision",  "Context Precision"),
+                ("context_recall",     "Context Recall"),
+                ("groundedness",       "Groundedness"),
+                ("coherence",          "Coherence"),
+                ("conciseness",        "Conciseness"),
+                ("overall_score",      "Overall Score"),
+            ]
+
+            # Build comparison table
+            table_data: Dict[str, List] = {"Metric": [d for _, d in DISPLAY_KEYS]}
+            sorted_keys = sorted(cached_evals.keys())
+            for sk in sorted_keys:
+                report = cached_evals[sk]
+                strategy_name = sk.replace("eval_result_", "Strategy ")
+                col_vals = []
+                for key, _ in DISPLAY_KEYS:
+                    if key == "overall_score":
+                        s = report.get("overall_score")
+                    else:
+                        m = report.get(key, {})
+                        s = m.get("score") if isinstance(m, dict) else None
+                    col_vals.append(f"{s:.0%}" if s is not None else "N/A")
+                table_data[strategy_name] = col_vals
+
+            try:
+                import pandas as pd
+                df = pd.DataFrame(table_data)
+                st.dataframe(df.set_index("Metric"), use_container_width=True)
+            except ImportError:
+                st.json(table_data)
+
+            # Visual bar chart comparison
+            try:
+                import pandas as pd
+                import plotly.graph_objects as go
+
+                metric_names = [d for _, d in DISPLAY_KEYS[:-1]]  # exclude Overall from chart
+                metric_keys = [k for k, _ in DISPLAY_KEYS[:-1]]
+
+                fig = go.Figure()
+                for sk in sorted_keys:
+                    report = cached_evals[sk]
+                    strategy_name = sk.replace("eval_result_", "Strategy ")
+                    scores = []
+                    for mk in metric_keys:
+                        m = report.get(mk, {})
+                        s = m.get("score") if isinstance(m, dict) else None
+                        scores.append(s * 100 if s is not None else 0)
+                    fig.add_trace(go.Bar(name=strategy_name, x=metric_names, y=scores))
+
+                fig.update_layout(
+                    barmode="group",
+                    title="Strategy Evaluation Comparison",
+                    yaxis_title="Score (%)",
+                    yaxis=dict(range=[0, 100]),
+                    legend_title="Strategy",
+                    height=400,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            except ImportError:
+                st.info("Install `plotly` and `pandas` for visual comparison charts.")
+
+            # Radar chart
+            try:
+                import plotly.graph_objects as go
+
+                radar_keys = [k for k, _ in DISPLAY_KEYS[:-1]]
+                radar_labels = [d for _, d in DISPLAY_KEYS[:-1]]
+                radar_labels_closed = radar_labels + [radar_labels[0]]
+
+                fig_radar = go.Figure()
+                for sk in sorted_keys:
+                    report = cached_evals[sk]
+                    strategy_name = sk.replace("eval_result_", "Strategy ")
+                    scores = []
+                    for mk in radar_keys:
+                        m = report.get(mk, {})
+                        s = m.get("score") if isinstance(m, dict) else None
+                        scores.append(s if s is not None else 0)
+                    scores_closed = scores + [scores[0]]
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=scores_closed,
+                        theta=radar_labels_closed,
+                        fill="toself",
+                        name=strategy_name,
+                    ))
+
+                fig_radar.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+                    showlegend=True,
+                    title="Radar: Strategy Evaluation Profile",
+                    height=420,
+                )
+                st.plotly_chart(fig_radar, use_container_width=True)
+            except ImportError:
+                pass
+
+            if st.button("🗑️ Clear Cached Evaluations", key="clear_evals"):
+                for k in list(st.session_state.keys()):
+                    if k.startswith("eval_result_"):
+                        del st.session_state[k]
+                st.rerun()
+
+
 # --- Main Navigation ---
+
 
 with st.sidebar:
     st.title("🧪 RAG Strategy Lab")
@@ -960,11 +1593,12 @@ with st.sidebar:
     1. Upload or select documents
     2. Configure ingestion settings
     3. Test different RAG strategies
+    4. Evaluate with Evaluation Lab
     """)
     
     st.markdown("---")
     
-    page = st.radio("Navigation", ["Strategies", "Ingestion Lab", "Strategy Lab"], index=0)
+    page = st.radio("Navigation", ["Strategies", "Ingestion Lab", "Strategy Lab", "Evaluation Lab"], index=0)
     st.divider()
     st.button("🎨 Toggle Theme", on_click=toggle_theme, use_container_width=True)
     st.caption(f"Current Theme: **{st.session_state.theme.title()}**")
@@ -973,5 +1607,7 @@ if page == "Strategies":
     render_learning_page()
 elif page == "Ingestion Lab":
     render_ingestion_page()
-else:
+elif page == "Strategy Lab":
     render_retrieval_page()
+else:
+    render_evaluation_page()
